@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "robo-eye-sense"
+version = "0.1.0"
+description = "Lightweight real-time visual marker detection for mobile robots"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.8"
+dependencies = [
+    "numpy>=1.20.0",
+    "opencv-python>=4.5.0",
+    "pupil-apriltags>=1.0.4",
+    "pyzbar>=0.1.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+]
+
+[project.scripts]
+robo-eye-sense = "main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["robo_eye_sense*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v"

@@ -1,0 +1,109 @@
+"""AprilTag detector wrapping the *pupil-apriltags* library.
+
+pupil-apriltags ships pre-compiled binaries for x86_64 and ARM, making it
+suitable for both development machines and embedded robot hardware (e.g.
+Raspberry Pi).
+
+Detection is intentionally single-threaded (``nthreads=1``) and uses a
+``quad_decimate`` factor to down-sample before detection, keeping CPU usage
+predictable on resource-constrained platforms.
+"""
+
+from __future__ import annotations
+
+import importlib
+import warnings
+from typing import List, Optional
+
+import cv2
+import numpy as np
+
+from .results import Detection, DetectionType
+
+_PUPIL_APRILTAGS_AVAILABLE: Optional[bool] = None
+
+
+def _apriltags_available() -> bool:
+    global _PUPIL_APRILTAGS_AVAILABLE
+    if _PUPIL_APRILTAGS_AVAILABLE is None:
+        _PUPIL_APRILTAGS_AVAILABLE = (
+            importlib.util.find_spec("pupil_apriltags") is not None
+        )
+    return _PUPIL_APRILTAGS_AVAILABLE
+
+
+class AprilTagDetector:
+    """Detect and decode AprilTag fiducial markers in a grayscale frame.
+
+    Parameters
+    ----------
+    families:
+        Space-separated list of tag families to detect (e.g. ``"tag36h11"``).
+    nthreads:
+        Number of threads used internally by the detector.  Keep at ``1``
+        on embedded platforms to avoid unpredictable CPU spikes.
+    quad_decimate:
+        Down-sampling factor applied before quad detection.  ``2.0`` halves
+        each dimension, giving a ~4× speed-up with minimal accuracy loss for
+        tags larger than ~15 cm at typical operating distances.
+
+    Raises
+    ------
+    ImportError
+        If *pupil-apriltags* is not installed.
+    """
+
+    def __init__(
+        self,
+        families: str = "tag36h11",
+        nthreads: int = 1,
+        quad_decimate: float = 2.0,
+    ) -> None:
+        if not _apriltags_available():
+            raise ImportError(
+                "pupil-apriltags is required for AprilTag detection. "
+                "Install it with:  pip install pupil-apriltags"
+            )
+        import pupil_apriltags as apriltag  # type: ignore[import]
+
+        self._detector = apriltag.Detector(
+            families=families,
+            nthreads=nthreads,
+            quad_decimate=quad_decimate,
+            quad_sigma=0.0,
+            refine_edges=1,
+            decode_sharpening=0.25,
+            debug=0,
+        )
+
+    def detect(self, gray_frame: np.ndarray) -> List[Detection]:
+        """Return AprilTag detections found in *gray_frame*.
+
+        Parameters
+        ----------
+        gray_frame:
+            Single-channel (grayscale) uint8 image.
+
+        Returns
+        -------
+        List[Detection]
+            One entry per detected tag.  ``identifier`` is the tag ID as a
+            string; ``corners`` follow the convention of pupil-apriltags
+            (bottom-left, bottom-right, top-right, top-left).
+        """
+        results = self._detector.detect(gray_frame)
+        detections: List[Detection] = []
+        for r in results:
+            center = (int(round(r.center[0])), int(round(r.center[1])))
+            corners = [
+                (int(round(c[0])), int(round(c[1]))) for c in r.corners
+            ]
+            detections.append(
+                Detection(
+                    detection_type=DetectionType.APRIL_TAG,
+                    identifier=str(r.tag_id),
+                    center=center,
+                    corners=corners,
+                )
+            )
+        return detections
