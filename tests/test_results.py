@@ -61,3 +61,20 @@ class TestDetection:
         r = repr(d)
         assert "qr_code" in r
         assert "hello" in r
+
+
+def test_package_import_is_lazy_for_detector(monkeypatch):
+    import importlib
+    import sys
+
+    # Work on a copy of sys.modules so this test does not affect other tests.
+    modules_copy = sys.modules.copy()
+    modules_copy.pop("robo_eye_sense", None)
+    modules_copy.pop("robo_eye_sense.detector", None)
+    monkeypatch.setattr(sys, "modules", modules_copy)
+
+    module = importlib.import_module("robo_eye_sense")
+
+    assert "robo_eye_sense.detector" not in sys.modules
+    assert hasattr(module, "Detection")
+    assert hasattr(module, "DetectionType")
