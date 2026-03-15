@@ -5,12 +5,13 @@ Primary public surface
 * :class:`~robo_eye_sense.detector.RoboEyeDetector` – all-in-one detector/tracker
 * :class:`~robo_eye_sense.results.Detection` – per-detection data class
 * :class:`~robo_eye_sense.results.DetectionType` – detection category enum
-* :class:`~robo_eye_sense.camera.Camera` – camera capture helper
+* :class:`~robo_eye_sense.camera.Camera` – camera capture helper (OpenCV-dependent)
 
 Notes
 -----
-``RoboEyeDetector`` depends on OpenCV. Importing it lazily keeps lightweight
-modules (e.g. :mod:`robo_eye_sense.results`) usable even when OpenCV is not
+``RoboEyeDetector`` and :class:`~robo_eye_sense.camera.Camera` depend on OpenCV.
+``RoboEyeDetector`` is imported lazily, which keeps lightweight modules
+(e.g. :mod:`robo_eye_sense.results`) usable even when OpenCV is not
 available yet.
 """
 
