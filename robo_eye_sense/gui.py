@@ -41,7 +41,7 @@ import numpy as np
 from PIL import Image, ImageTk
 
 from .camera import Camera
-from .detector import RoboEyeDetector
+from .detector import RoboEyeDetector, _compute_orientation
 from .results import Detection, DetectionType
 
 # How often (milliseconds) the frame-update callback is rescheduled
@@ -80,6 +80,7 @@ class RoboEyeSenseApp:
         self._fps_display = 0.0
         self._t_fps = time.perf_counter()
         self._last_detections: List[Detection] = []
+        self._canvas_image_id: Optional[int] = None
 
         # Detection-mode flags (mirror the detector's live state)
         self._enable_april = tk.BooleanVar(value=detector._april_detector is not None)
@@ -363,7 +364,12 @@ class RoboEyeSenseApp:
             pil_img = pil_img.resize((canvas_w, canvas_h), resample)
 
         self._tk_image = ImageTk.PhotoImage(image=pil_img)
-        self._canvas.create_image(0, 0, anchor="nw", image=self._tk_image)
+        if self._canvas_image_id is None:
+            self._canvas_image_id = self._canvas.create_image(
+                0, 0, anchor="nw", image=self._tk_image
+            )
+        else:
+            self._canvas.itemconfigure(self._canvas_image_id, image=self._tk_image)
 
         # Update info panels
         self._update_info_panel(detections)
@@ -392,7 +398,6 @@ class RoboEyeSenseApp:
             ident = f"  id={d.identifier}" if d.identifier else ""
             track = f"  #trk={d.track_id}" if d.track_id is not None else ""
             cx, cy = d.center
-            from robo_eye_sense.detector import _compute_orientation
             angle = _compute_orientation(d.corners)
             line = (
                 f"[{dtype}]{ident}{track}\n"

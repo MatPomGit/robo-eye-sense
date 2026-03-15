@@ -26,6 +26,9 @@ dev = [
 [project.scripts]
 robo-eye-sense = "main:main"
 
+[tool.setuptools]
+py-modules = ["main"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["robo_eye_sense*"]
