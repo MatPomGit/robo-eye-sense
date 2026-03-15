@@ -46,7 +46,7 @@ class Detection:
     confidence: float = 1.0
 
     def __repr__(self) -> str:  # pragma: no cover
-        id_str = f"id={self.identifier!r} " if self.identifier else ""
+        id_str = f"id={self.identifier!r} " if self.identifier is not None else ""
         track_str = f"track={self.track_id} " if self.track_id is not None else ""
         return (
             f"Detection({self.detection_type.value} "

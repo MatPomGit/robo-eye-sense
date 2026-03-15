@@ -62,6 +62,11 @@ class TestDetection:
         assert "qr_code" in r
         assert "hello" in r
 
+    def test_repr_keeps_empty_identifier(self):
+        d = self._make(detection_type=DetectionType.QR_CODE, identifier="")
+        r = repr(d)
+        assert "id=''" in r
+
 
 def test_package_import_is_lazy_for_detector(monkeypatch):
     import importlib
