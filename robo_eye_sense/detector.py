@@ -113,6 +113,10 @@ class RoboEyeDetector:
         faster but reduce detection range.
     laser_brightness_threshold:
         Pixel brightness threshold for laser-spot detection (0-255).
+    laser_target_area:
+        Target laser-spot area in pixels for laser detection.
+    laser_sensitivity:
+        Detection sensitivity (0-100) for laser-spot detection.
     tracker_max_disappeared:
         Frames before a lost track is removed.
     tracker_max_distance:
@@ -127,6 +131,8 @@ class RoboEyeDetector:
         april_families: str = "tag36h11",
         april_quad_decimate: float = 2.0,
         laser_brightness_threshold: int = 240,
+        laser_target_area: int = 100,
+        laser_sensitivity: int = 50,
         tracker_max_disappeared: int = 10,
         tracker_max_distance: int = 50,
     ) -> None:
@@ -153,7 +159,9 @@ class RoboEyeDetector:
 
         if enable_laser:
             self._laser_detector = LaserSpotDetector(
-                brightness_threshold=laser_brightness_threshold
+                brightness_threshold=laser_brightness_threshold,
+                target_area=laser_target_area,
+                sensitivity=laser_sensitivity,
             )
 
         self._tracker = CentroidTracker(

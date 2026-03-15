@@ -8,7 +8,7 @@ objects (lamps, windows, etc.).
 
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 import cv2
 import numpy as np
@@ -27,14 +27,23 @@ class LaserSpotDetector:
         laser pointer; lower values detect dimmer spots at the risk of more
         false positives.
     min_area:
-        Minimum contour area in pixels.  Filters out single-pixel noise.
+        Hard minimum contour area in pixels.  Filters out single-pixel noise.
     max_area:
-        Maximum contour area in pixels.  Filters out large bright objects
-        such as light fixtures.
+        Hard maximum contour area in pixels.  Upper absolute limit; the
+        effective maximum is also bounded by *target_area* and *sensitivity*.
     min_circularity:
         Minimum circularity score ``4π·area/perimeter²`` in ``[0, 1]``.
-        A perfect circle scores ``1.0``; the default ``0.2`` is permissive
-        enough to tolerate spots blurred by defocus or surface angle.
+        A perfect circle scores ``1.0``; the default ``0.2`` is the most
+        permissive threshold (applied at maximum *sensitivity*).
+    target_area:
+        Target spot area in pixels.  Together with *sensitivity* this
+        controls the acceptable area window.  Default ``100`` pixels.
+    sensitivity:
+        Detection sensitivity in the range ``[0, 100]``.  At low values
+        only spots that closely match *target_area* and have high circularity
+        are accepted (fewer but more reliable detections).  At high values
+        the acceptance window widens and circularity requirements are relaxed
+        (more detections, potentially including weaker spots).  Default ``50``.
     """
 
     def __init__(
@@ -43,11 +52,17 @@ class LaserSpotDetector:
         min_area: int = 4,
         max_area: int = 1000,
         min_circularity: float = 0.2,
+        target_area: int = 100,
+        sensitivity: int = 50,
     ) -> None:
         self.brightness_threshold = brightness_threshold
         self.min_area = min_area
         self.max_area = max_area
         self.min_circularity = min_circularity
+        self.target_area = target_area
+        self.sensitivity = max(0, min(100, sensitivity))
+        # Set after each detect() call; used by the GUI threshold overlay.
+        self.last_threshold_mask: Optional[np.ndarray] = None
 
     def detect(self, frame: np.ndarray) -> List[Detection]:
         """Return laser-spot detections found in *frame*.
@@ -66,10 +81,11 @@ class LaserSpotDetector:
         """
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        # Isolate very bright regions
+        # Isolate very bright regions and store the raw mask for the GUI overlay
         _, thresh = cv2.threshold(
             gray, self.brightness_threshold, 255, cv2.THRESH_BINARY
         )
+        self.last_threshold_mask = thresh.copy()
 
         # Morphological close to fill small holes inside a spot
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
@@ -79,17 +95,39 @@ class LaserSpotDetector:
             thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
 
+        # Compute effective area bounds from target_area and sensitivity.
+        # area_spread grows from 0.1× (tight) to 10× (wide) as sensitivity
+        # increases from 0 to 100, giving the acceptable area window
+        # [target_area / (1 + spread), target_area * (1 + spread)].
+        sens_norm = self.sensitivity / 100.0
+        area_spread = 0.1 + sens_norm * 9.9
+        effective_min_area = max(
+            self.min_area,
+            int(self.target_area / (1.0 + area_spread)),
+        )
+        effective_max_area = min(
+            self.max_area,
+            int(self.target_area * (1.0 + area_spread)),
+        )
+
+        # Circularity requirement: strictest (0.8) at sensitivity=0,
+        # relaxing to min_circularity at sensitivity=100.
+        high_circ_bound = max(self.min_circularity, 0.8)
+        effective_min_circularity = self.min_circularity + (
+            high_circ_bound - self.min_circularity
+        ) * (1.0 - sens_norm)
+
         detections: List[Detection] = []
         for cnt in contours:
             area = cv2.contourArea(cnt)
-            if area < self.min_area or area > self.max_area:
+            if area < effective_min_area or area > effective_max_area:
                 continue
 
             # Circularity filter
             perimeter = cv2.arcLength(cnt, True)
             if perimeter > 0:
                 circularity = 4.0 * np.pi * area / (perimeter ** 2)
-                if circularity < self.min_circularity:
+                if circularity < effective_min_circularity:
                     continue
 
             moments = cv2.moments(cnt)

@@ -12,6 +12,8 @@ Layout
 |  ---------- |                           | (list)    |
 |  Parameters |                           |           |
 |  Threshold  |                           |           |
+|  Target area|                           |           |
+|  Sensitivity|                           |           |
 |  Decimate   |                           |           |
 +-------------+---------------------------+-----------+
 
@@ -93,13 +95,26 @@ class RoboEyeSenseApp:
             if detector._laser_detector is not None
             else 240
         )
+        _init_target_area = (
+            detector._laser_detector.target_area
+            if detector._laser_detector is not None
+            else 100
+        )
+        _init_sensitivity = (
+            detector._laser_detector.sensitivity
+            if detector._laser_detector is not None
+            else 50
+        )
         _init_decimate = (
             detector._april_detector.quad_decimate
             if detector._april_detector is not None
             else 2.0
         )
         self._laser_threshold = tk.IntVar(value=_init_threshold)
+        self._laser_target_area = tk.IntVar(value=_init_target_area)
+        self._laser_sensitivity = tk.IntVar(value=_init_sensitivity)
         self._april_decimate = tk.DoubleVar(value=_init_decimate)
+        self._show_threshold_overlay = tk.BooleanVar(value=False)
 
         # Build the UI
         self._build_ui()
@@ -197,6 +212,47 @@ class RoboEyeSenseApp:
             command=self._on_threshold_change,
         ).pack(fill="x")
 
+        # Laser target area
+        ttk.Label(parent, text="Laser target area (px)").pack(
+            anchor="w", pady=(8, 0)
+        )
+        self._target_area_label = ttk.Label(
+            parent, text=str(self._laser_target_area.get())
+        )
+        self._target_area_label.pack(anchor="e")
+        ttk.Scale(
+            parent,
+            from_=4,
+            to=2000,
+            orient="horizontal",
+            variable=self._laser_target_area,
+            command=self._on_target_area_change,
+        ).pack(fill="x")
+
+        # Laser sensitivity
+        ttk.Label(parent, text="Laser sensitivity (0–100)").pack(
+            anchor="w", pady=(8, 0)
+        )
+        self._sensitivity_label = ttk.Label(
+            parent, text=str(self._laser_sensitivity.get())
+        )
+        self._sensitivity_label.pack(anchor="e")
+        ttk.Scale(
+            parent,
+            from_=0,
+            to=100,
+            orient="horizontal",
+            variable=self._laser_sensitivity,
+            command=self._on_sensitivity_change,
+        ).pack(fill="x")
+
+        # Threshold overlay toggle
+        ttk.Checkbutton(
+            parent,
+            text="Show threshold overlay",
+            variable=self._show_threshold_overlay,
+        ).pack(anchor="w", pady=(8, 0))
+
         # AprilTag quad_decimate
         ttk.Label(parent, text="AprilTag decimate (1–4)").pack(
             anchor="w", pady=(8, 0)
@@ -288,7 +344,9 @@ class RoboEyeSenseApp:
         if self._enable_laser.get():
             if self.detector._laser_detector is None:
                 self.detector._laser_detector = LaserSpotDetector(
-                    brightness_threshold=self._laser_threshold.get()
+                    brightness_threshold=self._laser_threshold.get(),
+                    target_area=self._laser_target_area.get(),
+                    sensitivity=self._laser_sensitivity.get(),
                 )
         else:
             self.detector._laser_detector = None
@@ -299,6 +357,20 @@ class RoboEyeSenseApp:
         self._threshold_label.config(text=str(val))
         if self.detector._laser_detector is not None:
             self.detector._laser_detector.brightness_threshold = val
+
+    def _on_target_area_change(self, _value: Optional[str] = None) -> None:
+        """Apply the new laser target-area value."""
+        val = self._laser_target_area.get()
+        self._target_area_label.config(text=str(val))
+        if self.detector._laser_detector is not None:
+            self.detector._laser_detector.target_area = val
+
+    def _on_sensitivity_change(self, _value: Optional[str] = None) -> None:
+        """Apply the new laser sensitivity value."""
+        val = self._laser_sensitivity.get()
+        self._sensitivity_label.config(text=str(val))
+        if self.detector._laser_detector is not None:
+            self.detector._laser_detector.sensitivity = val
 
     def _on_decimate_change(self, _value: Optional[str] = None) -> None:
         """Apply the new AprilTag quad_decimate value."""
@@ -338,7 +410,31 @@ class RoboEyeSenseApp:
             self._t_fps = t_now
 
         # Draw annotations on a copy of the frame
-        vis = self.detector.draw_detections(frame.copy(), detections)
+        vis = frame.copy()
+
+        # Threshold overlay: highlight pixels above the laser brightness
+        # threshold so users can see the effect of slider adjustments in
+        # real time.
+        if (
+            self._show_threshold_overlay.get()
+            and self.detector._laser_detector is not None
+        ):
+            mask = self.detector._laser_detector.last_threshold_mask
+            if mask is None:
+                # Fallback before the first detect() call
+                gray = cv2.cvtColor(vis, cv2.COLOR_BGR2GRAY)
+                _, mask = cv2.threshold(
+                    gray,
+                    self.detector._laser_detector.brightness_threshold,
+                    255,
+                    cv2.THRESH_BINARY,
+                )
+            # Semi-transparent orange overlay on all above-threshold pixels
+            overlay = np.zeros_like(vis)
+            overlay[mask > 0] = (0, 140, 255)  # BGR orange
+            cv2.addWeighted(overlay, 0.45, vis, 1.0, 0, vis)
+
+        vis = self.detector.draw_detections(vis, detections)
 
         # Overlay FPS
         cv2.putText(

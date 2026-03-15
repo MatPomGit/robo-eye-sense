@@ -103,3 +103,78 @@ class TestLaserSpotDetector:
         detector = self._detector(min_circularity=0.5, max_area=10000)
         results = detector.detect(frame)
         assert results == []
+
+    # ------------------------------------------------------------------
+    # target_area parameter
+    # ------------------------------------------------------------------
+
+    def test_target_area_filters_spot_outside_window(self):
+        """Spot whose area differs greatly from target_area at low sensitivity
+        should not be detected."""
+        # Large circle: area ~ π*30² ~ 2827 pixels
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        cv2.circle(frame, (100, 100), 30, (255, 255, 255), -1)
+        # target_area=10 with very low sensitivity → tight window that
+        # excludes the large circle (area far from 10)
+        detector = self._detector(
+            target_area=10, sensitivity=0, max_area=10000
+        )
+        results = detector.detect(frame)
+        assert results == []
+
+    def test_target_area_accepts_matching_spot(self):
+        """Spot whose area is close to target_area should be accepted."""
+        # Circle with radius=6: area ~ 113 px
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        cv2.circle(frame, (100, 100), 6, (255, 255, 255), -1)
+        # target_area=100 with medium sensitivity → window includes ~113 px
+        detector = self._detector(target_area=100, sensitivity=50)
+        results = detector.detect(frame)
+        assert len(results) == 1
+
+    # ------------------------------------------------------------------
+    # sensitivity parameter
+    # ------------------------------------------------------------------
+
+    def test_low_sensitivity_detects_fewer_spots_than_high(self):
+        """Higher sensitivity should accept at least as many spots as lower
+        sensitivity when both threshold and target_area are constant."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        # Two circles with radii 6 and 20 – different areas
+        cv2.circle(frame, (60, 60), 6, (255, 255, 255), -1)
+        cv2.circle(frame, (140, 140), 20, (255, 255, 255), -1)
+
+        det_low = self._detector(target_area=50, sensitivity=5, max_area=10000)
+        det_high = self._detector(target_area=50, sensitivity=95, max_area=10000)
+        count_low = len(det_low.detect(frame))
+        count_high = len(det_high.detect(frame))
+        assert count_high >= count_low
+
+    def test_zero_sensitivity_requires_high_circularity(self):
+        """At sensitivity=0 the effective circularity threshold rises to ~0.8,
+        so a very elongated region should be rejected."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        # Elongated rectangle: low circularity
+        cv2.rectangle(frame, (5, 90), (195, 110), (255, 255, 255), -1)
+        detector = self._detector(
+            sensitivity=0, target_area=380, max_area=10000, min_circularity=0.05
+        )
+        results = detector.detect(frame)
+        assert results == []
+
+    # ------------------------------------------------------------------
+    # last_threshold_mask attribute
+    # ------------------------------------------------------------------
+
+    def test_last_threshold_mask_set_after_detect(self, bright_spot_frame):
+        """detect() should populate last_threshold_mask."""
+        detector = self._detector()
+        assert detector.last_threshold_mask is None
+        detector.detect(bright_spot_frame)
+        assert detector.last_threshold_mask is not None
+
+    def test_last_threshold_mask_shape_matches_frame(self, bright_spot_frame):
+        detector = self._detector()
+        detector.detect(bright_spot_frame)
+        h, w = bright_spot_frame.shape[:2]
+        assert detector.last_threshold_mask.shape == (h, w)
