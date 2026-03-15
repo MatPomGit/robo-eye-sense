@@ -35,7 +35,14 @@ def __getattr__(name: str) -> Any:
     when callers only need data models from :mod:`robo_eye_sense.results`.
     """
     if name == "RoboEyeDetector":
-        from .detector import RoboEyeDetector
+        try:
+            from .detector import RoboEyeDetector
+        except ImportError as exc:
+            raise ImportError(
+                "RoboEyeDetector could not be imported because its OpenCV (cv2) "
+                "dependency is missing or failed to initialize. Ensure that "
+                "OpenCV is installed and usable in this environment."
+            ) from exc
 
         return RoboEyeDetector
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
