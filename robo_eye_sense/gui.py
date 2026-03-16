@@ -363,7 +363,9 @@ class RoboEyeSenseApp:
         if self._enable_april.get():
             if self.detector._april_detector is None:
                 if _apriltags_available():
-                    self.detector._april_detector = AprilTagDetector()
+                    self.detector._april_detector = AprilTagDetector(
+                        quad_decimate=round(self._april_decimate.get(), 1)
+                    )
                 else:
                     # pupil-apriltags not installed; revert the checkbox
                     self._enable_april.set(False)
@@ -420,6 +422,7 @@ class RoboEyeSenseApp:
         val = round(self._april_decimate.get(), 1)
         self._decimate_label.config(text=f"{val:.1f}")
         if self.detector._april_detector is not None:
+            self.detector._april_detector.quad_decimate = val
             try:
                 self.detector._april_detector._detector.quad_decimate = val
             except AttributeError:
