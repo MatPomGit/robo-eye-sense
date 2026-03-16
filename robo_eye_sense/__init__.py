@@ -19,14 +19,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .results import Detection, DetectionType
+from .results import Detection, DetectionMode, DetectionType
 
 if TYPE_CHECKING:
     from .detector import RoboEyeDetector
 
-__all__ = ["RoboEyeDetector", "Detection", "DetectionType", "APP_NAME"]
-__version__ = "0.2.0"
-APP_NAME = "RoboEyeSense"
+__all__ = ["RoboEyeDetector", "Detection", "DetectionMode", "DetectionType"]
+__version__ = "0.1.0"
 
 
 def __getattr__(name: str) -> Any:

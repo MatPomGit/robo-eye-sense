@@ -15,6 +15,31 @@ class DetectionType(Enum):
     LASER_SPOT = "laser_spot"
 
 
+class DetectionMode(Enum):
+    """Operating mode of the detector pipeline.
+
+    NORMAL:
+        Default balanced mode – identical to the original behaviour.
+    FAST:
+        Optimised for speed on slower hardware.  The input frame is
+        downscaled by 50 % before detection (reducing processed pixels by
+        ~75 %) and AprilTag quad_decimate is raised to 4.0.  Detected
+        coordinates are scaled back to original resolution before being
+        returned.
+    ROBUST:
+        Optimised for reliable tracking when the object moves quickly or
+        the image is temporarily blurred (motion blur).  An unsharp-mask
+        sharpening filter is applied before detection, the tracker uses a
+        Kalman-filter velocity model for predictive matching, and the
+        disappearance / distance budgets are widened so that a briefly
+        lost track is not prematurely discarded.
+    """
+
+    NORMAL = "normal"
+    FAST = "fast"
+    ROBUST = "robust"
+
+
 @dataclass
 class Detection:
     """A single detected object within one video frame.

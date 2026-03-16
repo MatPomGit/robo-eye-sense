@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from robo_eye_sense.detector import RoboEyeDetector
-from robo_eye_sense.results import Detection, DetectionType
+from robo_eye_sense.results import Detection, DetectionMode, DetectionType
 
 
 @pytest.fixture
@@ -160,3 +160,170 @@ class TestRoboEyeDetectorDraw:
         # Should not raise even with a very long identifier
         annotated = detector.draw_detections(blank_bgr.copy(), [d])
         assert annotated is not None
+
+
+# ---------------------------------------------------------------------------
+# DetectionMode – Mode 2: FAST
+# ---------------------------------------------------------------------------
+
+
+class TestFastMode:
+    """RoboEyeDetector in FAST mode downscales frames and scales results back."""
+
+    @staticmethod
+    def _make_detector(**kwargs):
+        with patch(
+            "robo_eye_sense.april_tag_detector._apriltags_available",
+            return_value=False,
+        ):
+            return RoboEyeDetector(mode=DetectionMode.FAST, enable_qr=False, **kwargs)
+
+    def test_mode_property(self):
+        d = self._make_detector()
+        assert d.mode == DetectionMode.FAST
+
+    def test_fast_mode_returns_list(self):
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        d = self._make_detector()
+        result = d.process_frame(frame)
+        assert isinstance(result, list)
+
+    def test_laser_detected_in_fast_mode(self):
+        """A bright spot in a large frame should be detected in FAST mode."""
+        frame = np.zeros((400, 400, 3), dtype=np.uint8)
+        # Radius 12 → after 50 % downscale → radius ~6, area ~113 px (well above min)
+        cv2.circle(frame, (200, 200), 12, (255, 255, 255), -1)
+        d = self._make_detector()
+        detections = d.process_frame(frame)
+        laser = [x for x in detections if x.detection_type == DetectionType.LASER_SPOT]
+        assert len(laser) == 1
+
+    def test_fast_mode_coordinates_are_scaled_back(self):
+        """Detected coordinates must be in original resolution (not downscaled)."""
+        frame = np.zeros((400, 400, 3), dtype=np.uint8)
+        # Place spot in lower-right quadrant so raw coordinates differ
+        # significantly between 50%-scaled and original space.
+        cv2.circle(frame, (300, 300), 12, (255, 255, 255), -1)
+        d = self._make_detector()
+        detections = d.process_frame(frame)
+        laser = [x for x in detections if x.detection_type == DetectionType.LASER_SPOT]
+        assert len(laser) == 1
+        cx, cy = laser[0].center
+        # At 50 % scale the centre would be ~(150, 150); after scaling back it
+        # should be significantly larger than the scaled value.
+        assert cx > 200 and cy > 200
+
+    def test_fast_mode_tracker_max_disappeared(self):
+        """FAST mode should configure tracker with a reduced max_disappeared."""
+        d = self._make_detector()
+        assert d._tracker.max_disappeared < 10  # FAST uses 5
+
+    def test_mode_switch_normal_to_fast(self):
+        with patch(
+            "robo_eye_sense.april_tag_detector._apriltags_available",
+            return_value=False,
+        ):
+            d = RoboEyeDetector(enable_qr=False)
+        assert d.mode == DetectionMode.NORMAL
+        d.mode = DetectionMode.FAST
+        assert d.mode == DetectionMode.FAST
+
+    def test_draw_shows_mode_label(self):
+        """draw_detections must not raise for FAST mode."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        d = self._make_detector()
+        result = d.draw_detections(frame.copy(), [])
+        assert result.shape == frame.shape
+
+
+# ---------------------------------------------------------------------------
+# DetectionMode – Mode 3: ROBUST
+# ---------------------------------------------------------------------------
+
+
+class TestRobustMode:
+    """RoboEyeDetector in ROBUST mode uses sharpening and Kalman tracking."""
+
+    @staticmethod
+    def _make_detector(**kwargs):
+        with patch(
+            "robo_eye_sense.april_tag_detector._apriltags_available",
+            return_value=False,
+        ):
+            return RoboEyeDetector(mode=DetectionMode.ROBUST, enable_qr=False, **kwargs)
+
+    def test_mode_property(self):
+        d = self._make_detector()
+        assert d.mode == DetectionMode.ROBUST
+
+    def test_robust_mode_returns_list(self):
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        d = self._make_detector()
+        result = d.process_frame(frame)
+        assert isinstance(result, list)
+
+    def test_laser_detected_in_robust_mode(self):
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        cv2.circle(frame, (100, 100), 6, (255, 255, 255), -1)
+        d = self._make_detector()
+        detections = d.process_frame(frame)
+        laser = [x for x in detections if x.detection_type == DetectionType.LASER_SPOT]
+        assert len(laser) == 1
+        assert laser[0].track_id is not None
+
+    def test_robust_tracker_uses_kalman(self):
+        d = self._make_detector()
+        assert d._tracker.use_kalman is True
+
+    def test_robust_tracker_max_disappeared(self):
+        """ROBUST mode should have a larger max_disappeared budget."""
+        d = self._make_detector()
+        assert d._tracker.max_disappeared > 10  # ROBUST uses 20
+
+    def test_robust_tracker_max_distance(self):
+        """ROBUST mode should have a larger max_distance budget."""
+        d = self._make_detector()
+        assert d._tracker.max_distance > 50  # ROBUST uses 100
+
+    def test_track_survives_multiple_blank_frames(self):
+        """In ROBUST mode a track should survive many consecutive missed frames."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        cv2.circle(frame, (100, 100), 6, (255, 255, 255), -1)
+        blank = np.zeros((200, 200, 3), dtype=np.uint8)
+
+        d = self._make_detector()
+        # Establish the track
+        r1 = d.process_frame(frame)
+        first_id = r1[0].track_id
+
+        # Feed several blank frames (up to max_disappeared - 1)
+        for _ in range(15):
+            d.process_frame(blank)
+
+        # Re-detect: should keep the same track ID
+        r2 = d.process_frame(frame)
+        assert len(r2) > 0
+        assert r2[0].track_id == first_id
+
+    def test_mode_switch_enables_kalman(self):
+        """Switching from NORMAL to ROBUST must enable Kalman filtering."""
+        with patch(
+            "robo_eye_sense.april_tag_detector._apriltags_available",
+            return_value=False,
+        ):
+            d = RoboEyeDetector(enable_qr=False)
+        assert d._tracker.use_kalman is False
+        d.mode = DetectionMode.ROBUST
+        assert d._tracker.use_kalman is True
+
+    def test_mode_switch_disables_kalman(self):
+        """Switching from ROBUST back to NORMAL must disable Kalman filtering."""
+        d = self._make_detector()
+        d.mode = DetectionMode.NORMAL
+        assert d._tracker.use_kalman is False
+
+    def test_draw_shows_mode_label(self):
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        d = self._make_detector()
+        result = d.draw_detections(frame.copy(), [])
+        assert result.shape == frame.shape
