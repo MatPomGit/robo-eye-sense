@@ -162,7 +162,16 @@ class TestCentroidTrackerUnlabeled:
 # ---------------------------------------------------------------------------
 
 
+
+
 class TestCentroidTrackerKalman:
+    @pytest.fixture(autouse=True)
+    def _requires_cv2_runtime(self):
+        pytest.importorskip(
+            "cv2",
+            reason="OpenCV runtime dependencies are unavailable",
+            exc_type=ImportError,
+        )
     """CentroidTracker with Kalman-filter prediction enabled."""
 
     def test_new_track_gets_id_with_kalman(self):

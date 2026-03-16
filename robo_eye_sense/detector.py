@@ -36,7 +36,7 @@ from .tracker import CentroidTracker
 # BGR colours used when drawing each detection type
 _COLOURS: Dict[DetectionType, Tuple[int, int, int]] = {
     DetectionType.APRIL_TAG: (0, 255, 0),    # green
-    DetectionType.QR_CODE: (255, 128, 0),    # blue-ish
+    DetectionType.QR_CODE: (255, 128, 0),    # bluish
     DetectionType.LASER_SPOT: (0, 255, 255), # yellow
 }
 

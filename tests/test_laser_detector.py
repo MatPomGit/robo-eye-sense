@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import cv2
 import numpy as np
 import pytest
+
+cv2 = pytest.importorskip("cv2", reason="OpenCV runtime dependencies are unavailable", exc_type=ImportError)
 
 from robo_eye_sense.laser_detector import LaserSpotDetector
 from robo_eye_sense.results import DetectionType

@@ -8,9 +8,10 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import cv2
 import numpy as np
 import pytest
+
+cv2 = pytest.importorskip("cv2", reason="OpenCV runtime dependencies are unavailable", exc_type=ImportError)
 
 from robo_eye_sense.detector import RoboEyeDetector
 from robo_eye_sense.results import Detection, DetectionMode, DetectionType

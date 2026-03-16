@@ -16,19 +16,22 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-import cv2
 import numpy as np
 
 from .results import Detection
 
 
-def _make_kalman(center: Tuple[int, int]) -> cv2.KalmanFilter:
+def _make_kalman(center: Tuple[int, int]) -> Any:
     """Return a new Kalman filter initialised at *center*.
+
+    Requires OpenCV (cv2) and is called only when Kalman tracking is enabled.
 
     State vector:  ``[x, y, vx, vy]``
     Measurement:   ``[x, y]``
     Model:         constant-velocity (velocity is propagated unchanged).
     """
+    import cv2
+
     kf = cv2.KalmanFilter(4, 2)
 
     # H – measurement matrix: observe x and y only
