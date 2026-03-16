@@ -39,6 +39,8 @@ pip install -r requirements.txt
 
 ### 3 – Run
 
+#### CLI (OpenCV window)
+
 ```bash
 # Default camera, display window, all detectors enabled
 python main.py
@@ -51,12 +53,38 @@ python main.py --source path/to/video.mp4
 
 # Headless mode (print detections to stdout)
 python main.py --headless
-
-# Only detect laser spots, lower resolution for speed
-python main.py --no-apriltag --no-qr --width 320 --height 240
 ```
 
 Press **q** in the display window to quit.
+
+#### Full GUI mode (Tkinter)
+
+```bash
+# Launch the full control panel GUI
+python main.py --gui
+```
+
+In GUI mode you can change detection mode and toggle detectors at runtime.
+If tkinter is missing, install it (e.g. `sudo apt install python3-tk`).
+
+#### Operating modes
+
+```bash
+# Balanced default
+python main.py --mode normal
+
+# Faster on weaker hardware
+python main.py --mode fast
+
+# More robust for motion blur / rapid movement
+python main.py --mode robust
+```
+
+#### Example: speed-oriented profile
+
+```bash
+python main.py --mode fast --no-apriltag --no-qr --width 320 --height 240
+```
 
 ---
 
