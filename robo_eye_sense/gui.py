@@ -45,6 +45,7 @@ from PIL import Image, ImageTk
 from .camera import Camera
 from .detector import RoboEyeDetector, _compute_orientation
 from .results import Detection, DetectionType
+from . import APP_NAME, __version__
 
 # How often (milliseconds) the frame-update callback is rescheduled
 _UPDATE_INTERVAL_MS = 16  # ~60 Hz ceiling; actual rate is camera-limited
@@ -73,7 +74,7 @@ class RoboEyeSenseApp:
         self.camera = camera
         self.detector = detector
 
-        self.root.title("RoboEyeSense")
+        self.root.title(f"{APP_NAME} v{__version__}")
         self.root.resizable(True, True)
 
         # ── State variables ──────────────────────────────────────────────
@@ -279,6 +280,13 @@ class RoboEyeSenseApp:
         ttk.Label(parent, text="INFO", font=("", 10, "bold")).pack(
             anchor="w", pady=(0, 6)
         )
+
+        # Software name and version
+        ttk.Label(
+            parent,
+            text=f"{APP_NAME} v{__version__}",
+            font=("", 9, "italic"),
+        ).pack(anchor="w")
 
         # Camera parameters
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)

@@ -24,8 +24,9 @@ from .results import Detection, DetectionType
 if TYPE_CHECKING:
     from .detector import RoboEyeDetector
 
-__all__ = ["RoboEyeDetector", "Detection", "DetectionType"]
-__version__ = "0.1.0"
+__all__ = ["RoboEyeDetector", "Detection", "DetectionType", "APP_NAME"]
+__version__ = "0.2.0"
+APP_NAME = "RoboEyeSense"
 
 
 def __getattr__(name: str) -> Any:
