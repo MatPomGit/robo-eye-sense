@@ -206,8 +206,12 @@ class RoboEyeDetector:
                 sensitivity=laser_sensitivity,
             )
 
-        # Create tracker with parameters appropriate for the requested mode
-        tp = _MODE_TRACKER_PARAMS[mode]
+        # Create tracker with parameters appropriate for the requested mode.
+        # In NORMAL mode honour user-provided tracker values.
+        tp = {
+            "max_disappeared": tracker_max_disappeared,
+            "max_distance": tracker_max_distance,
+        } if mode == DetectionMode.NORMAL else _MODE_TRACKER_PARAMS[mode]
         self._tracker = CentroidTracker(
             max_disappeared=tp["max_disappeared"],
             max_distance=tp["max_distance"],
