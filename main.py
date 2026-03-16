@@ -28,14 +28,19 @@ import time
 
 import cv2
 
-from robo_eye_sense import RoboEyeDetector
+from robo_eye_sense import APP_NAME, RoboEyeDetector, __version__
 from robo_eye_sense.camera import Camera
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="RoboEyeSense – real-time visual marker detection",
+        description=f"{APP_NAME} – real-time visual marker detection",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"{APP_NAME} {__version__}",
     )
     parser.add_argument(
         "--source",
@@ -85,6 +90,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:  # noqa: C901
     args = _parse_args(argv)
+
+    print(f"{APP_NAME} v{__version__}")
 
     detector = RoboEyeDetector(
         enable_apriltag=not args.no_apriltag,
