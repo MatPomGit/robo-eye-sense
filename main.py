@@ -5,6 +5,14 @@ Run with a live camera::
 
     python main.py
 
+Run in fast (low-power) mode::
+
+    python main.py --mode fast
+
+Run in robust (motion-blur-resistant) mode::
+
+    python main.py --mode robust
+
 Run with the full GUI window::
 
     python main.py --gui
@@ -30,6 +38,7 @@ import cv2
 
 from robo_eye_sense import RoboEyeDetector
 from robo_eye_sense.camera import Camera
+from robo_eye_sense.results import DetectionMode
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -71,6 +80,17 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="AprilTag quad_decimate factor (higher = faster, lower range).",
     )
     parser.add_argument(
+        "--mode",
+        default="normal",
+        choices=["normal", "fast", "robust"],
+        help=(
+            "Operating mode: "
+            "'normal' – balanced default; "
+            "'fast' – downscales frames for low-power hardware; "
+            "'robust' – sharpening + Kalman tracking for motion-blur resistance."
+        ),
+    )
+    parser.add_argument(
         "--headless",
         action="store_true",
         help="Run without a display window; print detections to stdout.",
@@ -86,10 +106,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:  # noqa: C901
     args = _parse_args(argv)
 
+    mode = DetectionMode(args.mode)
+
     detector = RoboEyeDetector(
         enable_apriltag=not args.no_apriltag,
         enable_qr=not args.no_qr,
         enable_laser=not args.no_laser,
+        mode=mode,
         april_families=args.april_families,
         april_quad_decimate=args.april_decimate,
         laser_brightness_threshold=args.laser_threshold,

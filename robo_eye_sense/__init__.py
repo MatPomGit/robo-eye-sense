@@ -19,12 +19,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .results import Detection, DetectionType
+from .results import Detection, DetectionMode, DetectionType
 
 if TYPE_CHECKING:
     from .detector import RoboEyeDetector
 
-__all__ = ["RoboEyeDetector", "Detection", "DetectionType"]
+__all__ = ["RoboEyeDetector", "Detection", "DetectionMode", "DetectionType"]
 __version__ = "0.1.0"
 
 

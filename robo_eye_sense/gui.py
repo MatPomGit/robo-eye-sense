@@ -5,11 +5,14 @@ Layout
 +-------------+---------------------------+-----------+
 |  CONTROLS   |       VIDEO FEED          |   INFO    |
 |  ---------- |  (annotated frame)        | --------- |
-|  Modes      |                           | Camera    |
-|  [x] April  |                           | FPS / W×H |
-|  [x] QR     |                           | --------- |
-|  [x] Laser  |                           | Objects   |
-|  ---------- |                           | (list)    |
+|  Mode       |                           | Camera    |
+|  [combo]    |                           | FPS / W×H |
+|  ---------- |                           | --------- |
+|  Detectors  |                           | Objects   |
+|  [x] April  |                           | (list)    |
+|  [x] QR     |                           |           |
+|  [x] Laser  |                           |           |
+|  ---------- |                           |           |
 |  Parameters |                           |           |
 |  Threshold  |                           |           |
 |  Target area|                           |           |
@@ -44,10 +47,18 @@ from PIL import Image, ImageTk
 
 from .camera import Camera
 from .detector import RoboEyeDetector, _compute_orientation
-from .results import Detection, DetectionType
+from .results import Detection, DetectionMode, DetectionType
 
 # How often (milliseconds) the frame-update callback is rescheduled
 _UPDATE_INTERVAL_MS = 16  # ~60 Hz ceiling; actual rate is camera-limited
+
+# Human-readable labels shown in the mode combobox
+_MODE_DISPLAY: dict[str, DetectionMode] = {
+    "Normal": DetectionMode.NORMAL,
+    "Fast (low-power)": DetectionMode.FAST,
+    "Robust (motion-blur resistant)": DetectionMode.ROBUST,
+}
+_MODE_DISPLAY_INV: dict[DetectionMode, str] = {v: k for k, v in _MODE_DISPLAY.items()}
 
 
 class RoboEyeSenseApp:
@@ -88,6 +99,10 @@ class RoboEyeSenseApp:
         self._enable_april = tk.BooleanVar(value=detector._april_detector is not None)
         self._enable_qr = tk.BooleanVar(value=detector._qr_detector is not None)
         self._enable_laser = tk.BooleanVar(value=detector._laser_detector is not None)
+
+        # Program mode
+        initial_mode_label = _MODE_DISPLAY_INV.get(detector.mode, "Normal")
+        self._mode_var = tk.StringVar(value=initial_mode_label)
 
         # Tunable parameters
         _init_threshold = (
@@ -164,6 +179,20 @@ class RoboEyeSenseApp:
         ttk.Label(parent, text="CONTROLS", font=("", 10, "bold")).pack(
             anchor="w", pady=(0, 6)
         )
+
+        # ── Program mode ──────────────────────────────────────────────────
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
+        ttk.Label(parent, text="Program mode").pack(anchor="w")
+
+        mode_combo = ttk.Combobox(
+            parent,
+            textvariable=self._mode_var,
+            values=list(_MODE_DISPLAY.keys()),
+            state="readonly",
+            width=28,
+        )
+        mode_combo.pack(anchor="w", pady=(2, 0))
+        mode_combo.bind("<<ComboboxSelected>>", self._on_mode_change)
 
         # ── Detection modes ───────────────────────────────────────────────
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
@@ -312,6 +341,12 @@ class RoboEyeSenseApp:
     # ──────────────────────────────────────────────────────────────────────
     # Control callbacks
     # ──────────────────────────────────────────────────────────────────────
+
+    def _on_mode_change(self, _event: Optional[object] = None) -> None:
+        """Switch the detector's operating mode."""
+        label = self._mode_var.get()
+        new_mode = _MODE_DISPLAY.get(label, DetectionMode.NORMAL)
+        self.detector.mode = new_mode
 
     def _on_toggle_april(self) -> None:
         """Enable or disable the AprilTag detector."""
@@ -472,8 +507,9 @@ class RoboEyeSenseApp:
 
         # Status bar
         n = len(detections)
+        mode_label = _MODE_DISPLAY_INV.get(self.detector.mode, "")
         self._status_var.set(
-            f"FPS: {self._fps_display:.1f}  |  Detections: {n}"
+            f"FPS: {self._fps_display:.1f}  |  Mode: {mode_label}  |  Detections: {n}"
         )
 
         # Schedule next update

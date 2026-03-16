@@ -3,6 +3,19 @@
 Combines AprilTag, QR-code, and laser-spot detectors into a single
 pipeline that also runs the centroid tracker.  Designed for continuous
 use in a ``while True`` video loop.
+
+Three operating modes are supported (see
+:class:`~robo_eye_sense.results.DetectionMode`):
+
+* **NORMAL** – default balanced mode (original behaviour).
+* **FAST** – input frame downscaled 50 % before detection so that all
+  detectors process only ¼ of the original pixels.  Detected coordinates
+  are scaled back to original resolution before being returned.  Suitable
+  for resource-constrained hardware.
+* **ROBUST** – unsharp-mask sharpening applied before detection to
+  counter motion blur; the centroid tracker uses a Kalman-filter velocity
+  model for predictive matching and the disappearance / distance budgets
+  are widened so that a briefly lost track survives temporary blurring.
 """
 
 from __future__ import annotations
@@ -17,7 +30,7 @@ import numpy as np
 from . import april_tag_detector
 from .laser_detector import LaserSpotDetector
 from .qr_detector import QRCodeDetector
-from .results import Detection, DetectionType
+from .results import Detection, DetectionMode, DetectionType
 from .tracker import CentroidTracker
 
 # BGR colours used when drawing each detection type
@@ -25,6 +38,23 @@ _COLOURS: Dict[DetectionType, Tuple[int, int, int]] = {
     DetectionType.APRIL_TAG: (0, 255, 0),    # green
     DetectionType.QR_CODE: (255, 128, 0),    # blue-ish
     DetectionType.LASER_SPOT: (0, 255, 255), # yellow
+}
+
+# Mode indicator text rendered in the top-right corner of each annotated frame
+_MODE_LABELS: Dict[DetectionMode, str] = {
+    DetectionMode.NORMAL: "Mode: Normal",
+    DetectionMode.FAST:   "Mode: Fast",
+    DetectionMode.ROBUST: "Mode: Robust",
+}
+
+# Scale factor applied in FAST mode
+_FAST_SCALE = 0.5
+
+# Tracker parameter overrides per mode
+_MODE_TRACKER_PARAMS: Dict[DetectionMode, Dict[str, int]] = {
+    DetectionMode.NORMAL: {"max_disappeared": 10, "max_distance": 50},
+    DetectionMode.FAST:   {"max_disappeared": 5,  "max_distance": 50},
+    DetectionMode.ROBUST: {"max_disappeared": 20, "max_distance": 100},
 }
 
 # Length of axis arrows drawn at the detection centre
@@ -95,6 +125,17 @@ def _draw_axes(
     )
 
 
+def _sharpen_frame(frame: np.ndarray) -> np.ndarray:
+    """Return a sharpened copy of *frame* using an unsharp mask.
+
+    Subtracts a Gaussian-blurred version from the original so that edges
+    and fine detail are accentuated.  This partially counteracts motion blur
+    and temporary defocus, improving detection recall in Mode 3 (ROBUST).
+    """
+    blurred = cv2.GaussianBlur(frame, (0, 0), sigmaX=3)
+    return cv2.addWeighted(frame, 1.5, blurred, -0.5, 0)
+
+
 class RoboEyeDetector:
     """All-in-one detector for visual markers and laser spots.
 
@@ -106,6 +147,9 @@ class RoboEyeDetector:
         Enable QR-code detection.
     enable_laser:
         Enable laser-spot detection.
+    mode:
+        Operating mode.  See :class:`~robo_eye_sense.results.DetectionMode`
+        for a description of each mode.
     april_families:
         AprilTag family string passed to :class:`~robo_eye_sense.april_tag_detector.AprilTagDetector`.
     april_quad_decimate:
@@ -118,9 +162,11 @@ class RoboEyeDetector:
     laser_sensitivity:
         Detection sensitivity (0-100) for laser-spot detection.
     tracker_max_disappeared:
-        Frames before a lost track is removed.
+        Frames before a lost track is removed (used in NORMAL mode; the
+        value is adjusted automatically in FAST and ROBUST modes).
     tracker_max_distance:
-        Maximum centroid distance for matching unlabeled tracks.
+        Maximum centroid distance for matching unlabeled tracks (used in
+        NORMAL mode; adjusted automatically in FAST and ROBUST modes).
     """
 
     def __init__(
@@ -128,6 +174,7 @@ class RoboEyeDetector:
         enable_apriltag: bool = True,
         enable_qr: bool = True,
         enable_laser: bool = True,
+        mode: DetectionMode = DetectionMode.NORMAL,
         april_families: str = "tag36h11",
         april_quad_decimate: float = 2.0,
         laser_brightness_threshold: int = 240,
@@ -139,6 +186,11 @@ class RoboEyeDetector:
         self._april_detector: Optional[april_tag_detector.AprilTagDetector] = None
         self._qr_detector: Optional[QRCodeDetector] = None
         self._laser_detector: Optional[LaserSpotDetector] = None
+
+        # Store the user-supplied normal-mode tracker parameters so that the
+        # mode setter can restore them when switching back to NORMAL.
+        self._tracker_max_disappeared_normal = tracker_max_disappeared
+        self._tracker_max_distance_normal = tracker_max_distance
 
         if enable_apriltag:
             if _apriltags_available():
@@ -164,10 +216,44 @@ class RoboEyeDetector:
                 sensitivity=laser_sensitivity,
             )
 
+        # Create tracker with parameters appropriate for the requested mode
+        tp = _MODE_TRACKER_PARAMS[mode]
         self._tracker = CentroidTracker(
-            max_disappeared=tracker_max_disappeared,
-            max_distance=tracker_max_distance,
+            max_disappeared=tp["max_disappeared"],
+            max_distance=tp["max_distance"],
+            use_kalman=(mode == DetectionMode.ROBUST),
         )
+
+        # Set mode last (after tracker is ready)
+        self._mode: DetectionMode = mode
+
+    # ------------------------------------------------------------------
+    # Mode property
+    # ------------------------------------------------------------------
+
+    @property
+    def mode(self) -> DetectionMode:
+        """Current operating mode."""
+        return self._mode
+
+    @mode.setter
+    def mode(self, value: DetectionMode) -> None:
+        """Switch operating mode and update tracker parameters accordingly."""
+        if value == self._mode:
+            return
+        self._mode = value
+        tp = _MODE_TRACKER_PARAMS[value]
+        self._tracker.max_disappeared = (
+            self._tracker_max_disappeared_normal
+            if value == DetectionMode.NORMAL
+            else tp["max_disappeared"]
+        )
+        self._tracker.max_distance = (
+            self._tracker_max_distance_normal
+            if value == DetectionMode.NORMAL
+            else tp["max_distance"]
+        )
+        self._tracker.use_kalman = (value == DetectionMode.ROBUST)
 
     # ------------------------------------------------------------------
     # Core processing
@@ -175,6 +261,15 @@ class RoboEyeDetector:
 
     def process_frame(self, frame: np.ndarray) -> List[Detection]:
         """Run all enabled detectors on *frame* and return tracked detections.
+
+        The processing pipeline is adapted to the current :attr:`mode`:
+
+        * **NORMAL** – original pipeline unchanged.
+        * **FAST** – frame is downscaled to 50 % (¼ pixels) before detection;
+          all returned coordinates are scaled back to original resolution.
+        * **ROBUST** – an unsharp-mask sharpening filter is applied before
+          running the standard detection pipeline; the tracker uses Kalman
+          filtering for predictive matching.
 
         Parameters
         ----------
@@ -186,19 +281,77 @@ class RoboEyeDetector:
         List[Detection]
             All detections found, each with a populated ``track_id``.
         """
-        detections: List[Detection] = []
+        if self._mode == DetectionMode.FAST:
+            return self._process_frame_fast(frame)
+        if self._mode == DetectionMode.ROBUST:
+            return self._process_frame_robust(frame)
+        return self._process_frame_normal(frame)
 
-        # Pre-compute grayscale once for detectors that need it
+    def _process_frame_normal(self, frame: np.ndarray) -> List[Detection]:
+        """Run the standard detection pipeline (Mode 1 – NORMAL)."""
+        detections: List[Detection] = []
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         if self._april_detector is not None:
             detections.extend(self._april_detector.detect(gray))
-
         if self._qr_detector is not None:
             detections.extend(self._qr_detector.detect(frame))
-
         if self._laser_detector is not None:
             detections.extend(self._laser_detector.detect(frame))
+
+        self._tracker.update(detections)
+        return detections
+
+    def _process_frame_fast(self, frame: np.ndarray) -> List[Detection]:
+        """Downscaled detection pipeline (Mode 2 – FAST).
+
+        Resizes *frame* to ``_FAST_SCALE`` of its original dimensions before
+        running all detectors, then scales every detected coordinate back to
+        the original resolution.  This reduces the number of processed pixels
+        by approximately ``(1 - _FAST_SCALE²) × 100 %``.
+        """
+        h, w = frame.shape[:2]
+        small = cv2.resize(
+            frame,
+            (max(1, int(w * _FAST_SCALE)), max(1, int(h * _FAST_SCALE))),
+        )
+
+        detections: List[Detection] = []
+        gray_small = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+
+        if self._april_detector is not None:
+            detections.extend(self._april_detector.detect(gray_small))
+        if self._qr_detector is not None:
+            detections.extend(self._qr_detector.detect(small))
+        if self._laser_detector is not None:
+            detections.extend(self._laser_detector.detect(small))
+
+        # Scale coordinates back to original resolution
+        inv = 1.0 / _FAST_SCALE
+        for d in detections:
+            d.center = (int(d.center[0] * inv), int(d.center[1] * inv))
+            d.corners = [(int(x * inv), int(y * inv)) for x, y in d.corners]
+
+        self._tracker.update(detections)
+        return detections
+
+    def _process_frame_robust(self, frame: np.ndarray) -> List[Detection]:
+        """Sharpened detection pipeline with Kalman tracking (Mode 3 – ROBUST).
+
+        Applies an unsharp-mask sharpening filter to *frame* before passing
+        it through the standard detection pipeline.  The tracker (already
+        configured with ``use_kalman=True``) handles the rest.
+        """
+        sharpened = _sharpen_frame(frame)
+        detections: List[Detection] = []
+        gray = cv2.cvtColor(sharpened, cv2.COLOR_BGR2GRAY)
+
+        if self._april_detector is not None:
+            detections.extend(self._april_detector.detect(gray))
+        if self._qr_detector is not None:
+            detections.extend(self._qr_detector.detect(sharpened))
+        if self._laser_detector is not None:
+            detections.extend(self._laser_detector.detect(sharpened))
 
         self._tracker.update(detections)
         return detections
@@ -221,6 +374,8 @@ class RoboEyeDetector:
         * Multi-line position / orientation annotation that moves with the
           object: pixel position ``(x, y)``, orientation angle ``θ``, the
           detection category, optional identifier, and track ID.
+
+        A mode indicator is rendered in the top-right corner of the frame.
 
         Modifies *frame* in-place and returns it for convenience.
 
@@ -282,5 +437,23 @@ class RoboEyeDetector:
                     1,
                     cv2.LINE_AA,
                 )
+
+        # Mode indicator – top-right corner
+        mode_label = _MODE_LABELS.get(self._mode, "")
+        if mode_label:
+            (lw, lh), _ = cv2.getTextSize(
+                mode_label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1
+            )
+            frame_w = frame.shape[1]
+            cv2.putText(
+                frame,
+                mode_label,
+                (frame_w - lw - 8, 24),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (200, 200, 200),
+                1,
+                cv2.LINE_AA,
+            )
 
         return frame

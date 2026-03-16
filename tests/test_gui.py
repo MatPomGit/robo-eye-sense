@@ -258,3 +258,29 @@ class TestRoboEyeSenseApp:
         app.root.destroy = MagicMock()
         app._on_close()
         assert app._running is False
+
+    def test_initial_mode_is_normal(self, app):
+        from robo_eye_sense.results import DetectionMode
+        assert app.detector.mode == DetectionMode.NORMAL
+
+    def test_mode_change_to_fast(self, app):
+        from robo_eye_sense.results import DetectionMode
+        app._mode_var.set("Fast (low-power)")
+        app._on_mode_change()
+        assert app.detector.mode == DetectionMode.FAST
+
+    def test_mode_change_to_robust(self, app):
+        from robo_eye_sense.results import DetectionMode
+        app._mode_var.set("Robust (motion-blur resistant)")
+        app._on_mode_change()
+        assert app.detector.mode == DetectionMode.ROBUST
+        assert app.detector._tracker.use_kalman is True
+
+    def test_mode_change_back_to_normal(self, app):
+        from robo_eye_sense.results import DetectionMode
+        app._mode_var.set("Robust (motion-blur resistant)")
+        app._on_mode_change()
+        app._mode_var.set("Normal")
+        app._on_mode_change()
+        assert app.detector.mode == DetectionMode.NORMAL
+        assert app.detector._tracker.use_kalman is False
