@@ -219,6 +219,21 @@ class TestFastMode:
         d = self._make_detector()
         assert d._tracker.max_disappeared < 10  # FAST uses 5
 
+
+    def test_normal_mode_honors_custom_tracker_params_on_init(self):
+        """NORMAL mode should keep user-provided tracker limits at construction."""
+        with patch(
+            "robo_eye_sense.april_tag_detector._apriltags_available",
+            return_value=False,
+        ):
+            d = RoboEyeDetector(
+                enable_qr=False,
+                tracker_max_disappeared=3,
+                tracker_max_distance=77,
+            )
+        assert d._tracker.max_disappeared == 3
+        assert d._tracker.max_distance == 77
+
     def test_mode_switch_normal_to_fast(self):
         with patch(
             "robo_eye_sense.april_tag_detector._apriltags_available",
