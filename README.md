@@ -2,6 +2,13 @@
 
 Lightweight real-time visual marker detection for mobile robots.
 
+**robo-eye-sense** combines three complementary detection technologies —
+AprilTag fiducial markers, QR codes, and laser-pointer spots — into a single,
+unified detection pipeline.  Every detected object is assigned a *stable
+track ID* that persists across frames, even through brief occlusions.  The
+system ships with a full Tkinter GUI for interactive tuning and a headless CLI
+for deployment on embedded hardware.
+
 ## Features
 
 | Capability | Technology |
@@ -9,12 +16,16 @@ Lightweight real-time visual marker detection for mobile robots.
 | **AprilTag detection & tracking** | [pupil-apriltags](https://github.com/pupil-labs/apriltags) |
 | **QR-code detection & decoding** | [pyzbar](https://github.com/NaturalHistoryMuseum/pyzbar) *(preferred)* / OpenCV fallback |
 | **Laser-spot detection** | OpenCV brightness thresholding + circularity filter |
-| **Multi-object tracking** | Centroid tracker with persistent IDs |
+| **Multi-object tracking** | Centroid tracker with persistent IDs (Kalman-filter mode available) |
+| **Interactive GUI** | Tkinter control panel – change mode, toggle detectors, tune laser parameters live |
+| **Three operating modes** | Normal / Fast (half-resolution) / Robust (sharpening + Kalman tracking) |
 
 All detectors run on every frame and their results are unified through a
 single `CentroidTracker` that assigns stable track IDs.  Labeled objects
 (AprilTags, QR codes) are matched by their semantic identity so the same
 physical marker always keeps the same track ID even after a brief occlusion.
+Unlabeled objects (laser spots) are matched by nearest-centroid distance, with
+optional Kalman-filter prediction in ROBUST mode.
 
 ---
 
@@ -64,7 +75,15 @@ Press **q** in the display window to quit.
 python main.py --gui
 ```
 
-In GUI mode you can change detection mode and toggle detectors at runtime.
+In GUI mode you can:
+- Switch between Normal / Fast / Robust detection modes via the combobox
+  (or keyboard shortcuts Ctrl+1 / Ctrl+2 / Ctrl+3).
+- Toggle individual detectors (AprilTag, QR Code, Laser Spot) on and off.
+- Adjust laser-detection parameters (brightness threshold, target area,
+  sensitivity) with live sliders.
+- Enable a **threshold overlay** to visualise which pixels are above the
+  laser brightness threshold in real time.
+
 If tkinter is missing, install it (e.g. `sudo apt install python3-tk`).
 
 #### Operating modes
@@ -93,13 +112,14 @@ python main.py --mode fast --no-apriltag --no-qr --width 320 --height 240
 ```
 robo_eye_sense/
 ├── __init__.py          # Public surface: RoboEyeDetector, Detection, DetectionType
-├── results.py           # Detection dataclass + DetectionType enum
-├── tracker.py           # CentroidTracker – assigns stable track IDs
+├── results.py           # Detection dataclass + DetectionType / DetectionMode enums
+├── tracker.py           # CentroidTracker – assigns stable track IDs (Kalman optional)
 ├── april_tag_detector.py  # Wraps pupil-apriltags
 ├── qr_detector.py       # pyzbar (preferred) or cv2.QRCodeDetector fallback
 ├── laser_detector.py    # Brightness threshold + size/circularity filters
 ├── detector.py          # RoboEyeDetector – orchestrates all sub-detectors
-└── camera.py            # VideoCapture wrapper (context manager)
+├── camera.py            # VideoCapture wrapper (context manager)
+└── gui.py               # Tkinter control-panel GUI (launched via --gui)
 main.py                  # CLI entry point
 ```
 
@@ -130,6 +150,8 @@ RoboEyeDetector.process_frame(frame)
 | `--width 320 --height 240` | 640×480 | Smaller frame → faster for all detectors |
 | `--laser-threshold 250` | `240` | Higher value → fewer false positives from lamps |
 | `--no-apriltag` / `--no-qr` / `--no-laser` | all on | Disable unused detectors |
+| `--mode fast` | `normal` | Downscales input by 50 % before detection (~4× fewer pixels) |
+| `--mode robust` | `normal` | Applies unsharp-mask sharpening + Kalman-filter tracking |
 
 ---
 
@@ -175,6 +197,10 @@ cv2.destroyAllWindows()
 pip install -r requirements-dev.txt
 pytest tests/ -v
 ```
+
+> **Note:** GUI tests (``tests/test_gui.py``) require a display and the
+> ``python3-tk`` package.  On headless CI machines run them via
+> ``xvfb-run pytest tests/ -v``.
 
 ---
 

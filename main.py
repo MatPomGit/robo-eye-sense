@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
 """CLI entry point for robo-eye-sense.
 
-Run with a live camera::
+robo-eye-sense detects AprilTag fiducial markers, QR codes, and laser-pointer
+spots in a live camera feed (or recorded video) and assigns each detected
+object a persistent track ID across frames.
+
+Run with a live camera (default: camera index 0, 640×480, all detectors on)::
 
     python main.py
 
-Run in fast (low-power) mode::
+Run in fast (low-power) mode – input is downscaled by 50 % before detection::
 
     python main.py --mode fast
 
-Run in robust (motion-blur-resistant) mode::
+Run in robust (motion-blur-resistant) mode – unsharp-mask sharpening and
+Kalman-filter tracking for better performance under rapid motion::
 
     python main.py --mode robust
 
-Run with the full GUI window::
+Run with the full Tkinter GUI (requires ``python3-tk``)::
 
     python main.py --gui
 
@@ -21,11 +26,11 @@ Run on a recorded video file::
 
     python main.py --source path/to/video.mp4
 
-Run headless (no GUI window, print detections to stdout)::
+Run headless (no display window; print detections to stdout)::
 
     python main.py --headless
 
-Press **q** to quit the display window (non-GUI mode).
+Press **q** to quit the OpenCV display window (non-GUI, non-headless mode).
 """
 
 from __future__ import annotations
@@ -112,7 +117,9 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         laser_brightness_threshold=args.laser_threshold,
     )
 
-    # Accept both integer camera indices and string paths/URLs
+    # Accept both integer camera indices (e.g. 0, 1) and string paths/URLs
+    # (e.g. "/dev/video0", "rtsp://..."). argparse always gives us a string,
+    # so we attempt an integer conversion first.
     try:
         source: int | str = int(args.source)
     except ValueError:

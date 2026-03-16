@@ -1,4 +1,8 @@
-"""Data structures shared across all detector and tracker modules."""
+"""Data structures shared across all detector and tracker modules.
+
+This module intentionally has no dependency on OpenCV so that it can be
+imported even in environments where OpenCV is not installed.
+"""
 
 from __future__ import annotations
 
@@ -31,7 +35,8 @@ class DetectionMode(Enum):
         sharpening filter is applied before detection, the tracker uses a
         Kalman-filter velocity model for predictive matching, and the
         disappearance / distance budgets are widened so that a briefly
-        lost track is not prematurely discarded.
+        lost track is not prematurely discarded.  Best suited for fast-
+        moving robots or unstable camera mounts.
     """
 
     NORMAL = "normal"

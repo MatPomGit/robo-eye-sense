@@ -4,6 +4,11 @@ A laser pointer creates a very small, very bright spot in the camera image.
 The detector thresholds the grayscale brightness channel, then applies size
 and circularity filters to isolate genuine spots and discard large bright
 objects (lamps, windows, etc.).
+
+The *sensitivity* parameter (0–100) provides a single knob to trade off
+precision against recall: at low values only spots that closely match the
+*target_area* and are highly circular are accepted; at high values the
+acceptance window widens and the circularity requirement is relaxed.
 """
 
 from __future__ import annotations

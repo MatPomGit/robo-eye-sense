@@ -8,17 +8,23 @@ Layout
 |  Mode       |                           | Camera    |
 |  [combo]    |                           | FPS / W×H |
 |  ---------- |                           | --------- |
-|  Detectors  |                           | Objects   |
-|  [x] April  |                           | (list)    |
-|  [x] QR     |                           |           |
-|  [x] Laser  |                           |           |
+|  Detectors  |                           | Mode      |
+|  [x] April  |                           | --------- |
+|  [x] QR     |                           | Objects   |
+|  [x] Laser  |                           | (list)    |
 |  ---------- |                           |           |
 |  Parameters |                           |           |
 |  Threshold  |                           |           |
 |  Target area|                           |           |
 |  Sensitivity|                           |           |
-|  Decimate   |                           |           |
+|  [ ] Overlay|                           |           |
+|  ---------- |                           |           |
+|  [  Quit  ] |                           |           |
 +-------------+---------------------------+-----------+
+|  Status bar (FPS | Mode | Detections)               |
++------------------------------------------------------|
+
+Keyboard shortcuts: Ctrl+1 → Normal, Ctrl+2 → Fast, Ctrl+3 → Robust.
 
 Usage::
 
@@ -50,7 +56,8 @@ from .camera import Camera
 from .detector import RoboEyeDetector, _compute_orientation
 from .results import Detection, DetectionMode, DetectionType
 
-# How often (milliseconds) the frame-update callback is rescheduled
+# How often (milliseconds) the frame-update callback is rescheduled.
+# 16 ms gives a ~60 Hz ceiling; the actual frame rate is limited by the camera.
 _UPDATE_INTERVAL_MS = 16  # ~60 Hz ceiling; actual rate is camera-limited
 
 # Human-readable labels shown in the mode combobox

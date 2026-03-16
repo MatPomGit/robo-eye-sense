@@ -16,6 +16,7 @@ Three operating modes are supported (see
   counter motion blur; the centroid tracker uses a Kalman-filter velocity
   model for predictive matching and the disappearance / distance budgets
   are widened so that a briefly lost track survives temporary blurring.
+  Best used when the camera or robot moves quickly.
 """
 
 from __future__ import annotations
@@ -33,7 +34,7 @@ from .qr_detector import QRCodeDetector
 from .results import Detection, DetectionMode, DetectionType
 from .tracker import CentroidTracker
 
-# BGR colours used when drawing each detection type
+# BGR colours used when drawing each detection type on the annotated frame
 _COLOURS: Dict[DetectionType, Tuple[int, int, int]] = {
     DetectionType.APRIL_TAG: (0, 255, 0),    # green
     DetectionType.QR_CODE: (255, 128, 0),    # bluish
@@ -130,7 +131,7 @@ def _sharpen_frame(frame: np.ndarray) -> np.ndarray:
 
     Subtracts a Gaussian-blurred version from the original so that edges
     and fine detail are accentuated.  This partially counteracts motion blur
-    and temporary defocus, improving detection recall in Mode 3 (ROBUST).
+    and temporary defocus, improving detection recall in ROBUST mode.
     """
     blurred = cv2.GaussianBlur(frame, (0, 0), sigmaX=3)
     return cv2.addWeighted(frame, 1.5, blurred, -0.5, 0)
@@ -278,7 +279,7 @@ class RoboEyeDetector:
         return self._process_frame_normal(frame)
 
     def _process_frame_normal(self, frame: np.ndarray) -> List[Detection]:
-        """Run the standard detection pipeline (Mode 1 – NORMAL)."""
+        """Run the standard detection pipeline (NORMAL mode)."""
         detections: List[Detection] = []
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
@@ -293,7 +294,7 @@ class RoboEyeDetector:
         return detections
 
     def _process_frame_fast(self, frame: np.ndarray) -> List[Detection]:
-        """Downscaled detection pipeline (Mode 2 – FAST).
+        """Downscaled detection pipeline (FAST mode).
 
         Resizes *frame* to ``_FAST_SCALE`` of its original dimensions before
         running all detectors, then scales every detected coordinate back to
@@ -326,11 +327,11 @@ class RoboEyeDetector:
         return detections
 
     def _process_frame_robust(self, frame: np.ndarray) -> List[Detection]:
-        """Sharpened detection pipeline with Kalman tracking (Mode 3 – ROBUST).
+        """Sharpened detection pipeline with Kalman tracking (ROBUST mode).
 
         Applies an unsharp-mask sharpening filter to *frame* before passing
         it through the standard detection pipeline.  The tracker (already
-        configured with ``use_kalman=True``) handles the rest.
+        configured with ``use_kalman=True``) handles predictive matching.
         """
         sharpened = _sharpen_frame(frame)
         detections: List[Detection] = []

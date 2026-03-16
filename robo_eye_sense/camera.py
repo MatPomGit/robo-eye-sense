@@ -2,6 +2,8 @@
 
 Provides a context-manager interface for safe resource management and
 convenience properties for querying and adjusting capture parameters.
+Supports integer camera indices, local video files, and network stream
+URLs (RTSP, HTTP).
 """
 
 from __future__ import annotations

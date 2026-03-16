@@ -10,6 +10,7 @@ unlabeled track maintains a 4-state Kalman filter
 (position + velocity: ``[x, y, vx, vy]``) so that the tracker can
 predict where a fast-moving or temporarily blurred object will reappear
 and match it even if the detection centroid has shifted noticeably.
+This Kalman mode is automatically activated in ROBUST pipeline mode.
 """
 
 from __future__ import annotations

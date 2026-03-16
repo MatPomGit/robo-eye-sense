@@ -1,9 +1,10 @@
 """QR-code detector.
 
-Uses *pyzbar* when available (more robust, requires ``libzbar0`` system
+Uses *pyzbar* when available (more robust, requires the ``libzbar0`` system
 library), otherwise falls back to OpenCV's built-in
 ``cv2.QRCodeDetector``.  Both backends produce identical
-:class:`~robo_eye_sense.results.Detection` objects.
+:class:`~robo_eye_sense.results.Detection` objects and support detecting
+multiple QR codes in a single frame.
 """
 
 from __future__ import annotations

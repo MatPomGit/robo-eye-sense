@@ -4,6 +4,9 @@ pupil-apriltags ships pre-compiled binaries for x86_64 and ARM, making it
 suitable for both development machines and embedded robot hardware (e.g.
 Raspberry Pi).
 
+All four standard tag families are detected simultaneously:
+``tag36h11``, ``tag25h9``, ``tag16h5``, ``tag12h10``.
+
 Detection is intentionally single-threaded (``nthreads=1``) to keep CPU usage
 predictable on resource-constrained platforms.
 """

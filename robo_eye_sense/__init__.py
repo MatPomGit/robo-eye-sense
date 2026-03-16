@@ -4,15 +4,18 @@ Primary public surface
 ----------------------
 * :class:`~robo_eye_sense.detector.RoboEyeDetector` – all-in-one detector/tracker
 * :class:`~robo_eye_sense.results.Detection` – per-detection data class
-* :class:`~robo_eye_sense.results.DetectionType` – detection category enum
+* :class:`~robo_eye_sense.results.DetectionType` – detection-category enum
+  (``APRIL_TAG``, ``QR_CODE``, ``LASER_SPOT``)
+* :class:`~robo_eye_sense.results.DetectionMode` – pipeline operating mode
+  (``NORMAL``, ``FAST``, ``ROBUST``)
 * :class:`~robo_eye_sense.camera.Camera` – camera capture helper (OpenCV-dependent)
 
 Notes
 -----
 ``RoboEyeDetector`` and :class:`~robo_eye_sense.camera.Camera` depend on OpenCV.
-``RoboEyeDetector`` is imported lazily, which keeps lightweight modules
-(e.g. :mod:`robo_eye_sense.results`) usable even when OpenCV is not
-available yet.
+``RoboEyeDetector`` is imported lazily via :pep:`562` (module ``__getattr__``),
+which keeps lightweight modules (e.g. :mod:`robo_eye_sense.results`) usable
+even when OpenCV is not installed or fails to initialise.
 """
 
 from __future__ import annotations
