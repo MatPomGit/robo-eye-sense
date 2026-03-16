@@ -127,7 +127,6 @@ RoboEyeDetector.process_frame(frame)
 
 | Parameter | Default | Effect |
 |---|---|---|
-| `--april-decimate 4.0` | `2.0` | 4× down-sample before AprilTag detection; ~4× faster, shorter detection range |
 | `--width 320 --height 240` | 640×480 | Smaller frame → faster for all detectors |
 | `--laser-threshold 250` | `240` | Higher value → fewer false positives from lamps |
 | `--no-apriltag` / `--no-qr` / `--no-laser` | all on | Disable unused detectors |

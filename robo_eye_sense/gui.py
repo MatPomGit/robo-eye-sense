@@ -121,15 +121,9 @@ class RoboEyeSenseApp:
             if detector._laser_detector is not None
             else 50
         )
-        _init_decimate = (
-            detector._april_detector.quad_decimate
-            if detector._april_detector is not None
-            else 2.0
-        )
         self._laser_threshold = tk.IntVar(value=_init_threshold)
         self._laser_target_area = tk.IntVar(value=_init_target_area)
         self._laser_sensitivity = tk.IntVar(value=_init_sensitivity)
-        self._april_decimate = tk.DoubleVar(value=_init_decimate)
         self._show_threshold_overlay = tk.BooleanVar(value=False)
 
         # Build the UI
@@ -283,23 +277,6 @@ class RoboEyeSenseApp:
             variable=self._show_threshold_overlay,
         ).pack(anchor="w", pady=(8, 0))
 
-        # AprilTag quad_decimate
-        ttk.Label(parent, text="AprilTag decimate (1–4)").pack(
-            anchor="w", pady=(8, 0)
-        )
-        self._decimate_label = ttk.Label(
-            parent, text=f"{self._april_decimate.get():.1f}"
-        )
-        self._decimate_label.pack(anchor="e")
-        ttk.Scale(
-            parent,
-            from_=1.0,
-            to=4.0,
-            orient="horizontal",
-            variable=self._april_decimate,
-            command=self._on_decimate_change,
-        ).pack(fill="x")
-
         # ── Quit button ───────────────────────────────────────────────────
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=12)
         ttk.Button(parent, text="Quit", command=self._on_close).pack(fill="x")
@@ -363,9 +340,7 @@ class RoboEyeSenseApp:
         if self._enable_april.get():
             if self.detector._april_detector is None:
                 if _apriltags_available():
-                    self.detector._april_detector = AprilTagDetector(
-                        quad_decimate=round(self._april_decimate.get(), 1)
-                    )
+                    self.detector._april_detector = AprilTagDetector()
                 else:
                     # pupil-apriltags not installed; revert the checkbox
                     self._enable_april.set(False)
@@ -416,17 +391,6 @@ class RoboEyeSenseApp:
         self._sensitivity_label.config(text=str(val))
         if self.detector._laser_detector is not None:
             self.detector._laser_detector.sensitivity = val
-
-    def _on_decimate_change(self, _value: Optional[str] = None) -> None:
-        """Apply the new AprilTag quad_decimate value."""
-        val = round(self._april_decimate.get(), 1)
-        self._decimate_label.config(text=f"{val:.1f}")
-        if self.detector._april_detector is not None:
-            self.detector._april_detector.quad_decimate = val
-            try:
-                self.detector._april_detector._detector.quad_decimate = val
-            except AttributeError:
-                pass  # detector doesn't expose this at runtime – ignored
 
     # ──────────────────────────────────────────────────────────────────────
     # Frame update loop

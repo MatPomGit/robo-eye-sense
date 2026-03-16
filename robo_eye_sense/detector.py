@@ -150,9 +150,6 @@ class RoboEyeDetector:
     mode:
         Operating mode.  See :class:`~robo_eye_sense.results.DetectionMode`
         for a description of each mode.
-    april_quad_decimate:
-        Down-sampling factor for AprilTag detection.  Higher values are
-        faster but reduce detection range.
     laser_brightness_threshold:
         Pixel brightness threshold for laser-spot detection (0-255).
     laser_target_area:
@@ -173,7 +170,6 @@ class RoboEyeDetector:
         enable_qr: bool = True,
         enable_laser: bool = True,
         mode: DetectionMode = DetectionMode.NORMAL,
-        april_quad_decimate: float = 2.0,
         laser_brightness_threshold: int = 240,
         laser_target_area: int = 100,
         laser_sensitivity: int = 50,
@@ -191,9 +187,7 @@ class RoboEyeDetector:
 
         if enable_apriltag:
             if _apriltags_available():
-                self._april_detector = april_tag_detector.AprilTagDetector(
-                    quad_decimate=april_quad_decimate,
-                )
+                self._april_detector = april_tag_detector.AprilTagDetector()
             else:
                 warnings.warn(
                     "pupil-apriltags not installed – AprilTag detection disabled. "

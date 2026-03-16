@@ -4,8 +4,7 @@ pupil-apriltags ships pre-compiled binaries for x86_64 and ARM, making it
 suitable for both development machines and embedded robot hardware (e.g.
 Raspberry Pi).
 
-Detection is intentionally single-threaded (``nthreads=1``) and uses a
-``quad_decimate`` factor to down-sample before detection, keeping CPU usage
+Detection is intentionally single-threaded (``nthreads=1``) to keep CPU usage
 predictable on resource-constrained platforms.
 """
 
@@ -47,10 +46,6 @@ class AprilTagDetector:
     nthreads:
         Number of threads used internally by the detector.  Keep at ``1``
         on embedded platforms to avoid unpredictable CPU spikes.
-    quad_decimate:
-        Down-sampling factor applied before quad detection.  ``2.0`` halves
-        each dimension, giving a ~4× speed-up with minimal accuracy loss for
-        tags larger than ~15 cm at typical operating distances.
 
     Raises
     ------
@@ -61,7 +56,6 @@ class AprilTagDetector:
     def __init__(
         self,
         nthreads: int = 1,
-        quad_decimate: float = 2.0,
     ) -> None:
         if not _apriltags_available():
             raise ImportError(
@@ -70,13 +64,10 @@ class AprilTagDetector:
             )
         import pupil_apriltags as apriltag  # type: ignore[import]
 
-        # Store the value here so the GUI can see it
-        self.quad_decimate = quad_decimate
-
         self._detector = apriltag.Detector(
             families=_ALL_FAMILIES,
             nthreads=nthreads,
-            quad_decimate=quad_decimate,
+            quad_decimate=2.0,
             quad_sigma=0.0,
             refine_edges=1,
             decode_sharpening=0.25,

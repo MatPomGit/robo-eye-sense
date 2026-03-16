@@ -255,17 +255,6 @@ class TestRoboEyeSenseApp:
         assert app.detector._laser_detector.target_area == 250
         assert app.detector._laser_detector.sensitivity == 30
 
-    def test_toggle_april_on_uses_current_decimate(self, app):
-        app._april_decimate.set(3.4)
-        app._enable_april.set(True)
-
-        with patch("robo_eye_sense.april_tag_detector._apriltags_available", return_value=True), patch(
-            "robo_eye_sense.april_tag_detector.AprilTagDetector"
-        ) as detector_cls:
-            app._on_toggle_april()
-
-        detector_cls.assert_called_once_with(quad_decimate=3.4)
-
     def test_on_close_sets_running_false(self, app):
         # Patch destroy so it doesn't actually destroy during test fixture
         app.root.destroy = MagicMock()

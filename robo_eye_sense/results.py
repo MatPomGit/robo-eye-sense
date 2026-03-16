@@ -23,9 +23,8 @@ class DetectionMode(Enum):
     FAST:
         Optimised for speed on slower hardware.  The input frame is
         downscaled by 50 % before detection (reducing processed pixels by
-        ~75 %) and AprilTag quad_decimate is raised to 4.0.  Detected
-        coordinates are scaled back to original resolution before being
-        returned.
+        ~75 %).  Detected coordinates are scaled back to original resolution
+        before being returned.
     ROBUST:
         Optimised for reliable tracking when the object moves quickly or
         the image is temporarily blurred (motion blur).  An unsharp-mask
