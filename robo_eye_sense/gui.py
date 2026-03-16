@@ -84,7 +84,7 @@ class RoboEyeSenseApp:
         self.camera = camera
         self.detector = detector
 
-        self.root.title("RoboEyeSense")
+        self.root.title(f"{APP_NAME} v{__version__}")
         self.root.resizable(True, True)
 
         # ── State variables ──────────────────────────────────────────────
@@ -308,6 +308,13 @@ class RoboEyeSenseApp:
         ttk.Label(parent, text="INFO", font=("", 10, "bold")).pack(
             anchor="w", pady=(0, 6)
         )
+
+        # Software name and version
+        ttk.Label(
+            parent,
+            text=f"{APP_NAME} v{__version__}",
+            font=("", 9, "italic"),
+        ).pack(anchor="w")
 
         # Camera parameters
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)

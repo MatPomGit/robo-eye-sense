@@ -36,15 +36,20 @@ import time
 
 import cv2
 
-from robo_eye_sense import RoboEyeDetector
+from robo_eye_sense import APP_NAME, RoboEyeDetector, __version__
 from robo_eye_sense.camera import Camera
 from robo_eye_sense.results import DetectionMode
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="RoboEyeSense – real-time visual marker detection",
+        description=f"{APP_NAME} – real-time visual marker detection",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"{APP_NAME} {__version__}",
     )
     parser.add_argument(
         "--source",
