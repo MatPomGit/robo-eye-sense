@@ -1,56 +1,57 @@
 # robo-vision
 
-Lightweight real-time visual marker detection for mobile robots.
+Lekkie wykrywanie wizualnych markerów w czasie rzeczywistym dla robotów mobilnych.
 
-**robo-eye-sense** combines three complementary detection technologies —
-AprilTag fiducial markers, QR codes, and laser-pointer spots — into a single,
-unified detection pipeline.  Every detected object is assigned a *stable
-track ID* that persists across frames, even through brief occlusions.  The
-system ships with a full Tkinter GUI for interactive tuning and a headless CLI
-for deployment on embedded hardware.
+**robo-eye-sense** łączy trzy uzupełniające się technologie detekcji —
+znaczniki fiducjalne AprilTag, kody QR oraz punkty lasera — w jeden,
+zunifikowany potok wykrywania. Każdemu wykrytemu obiektowi nadawane jest
+*stabilne ID śledzenia*, które utrzymuje się przez klatki, nawet przy krótkich
+zasłonięciach. System zawiera pełne GUI Tkinter do interaktywnego strojenia
+oraz bezgłowy interfejs CLI do wdrożeń na sprzęcie wbudowanym.
 
-## Features
+## Funkcje
 
-| Capability | Technology |
+| Możliwość | Technologia |
 |---|---|
-| **AprilTag detection & tracking** | [pupil-apriltags](https://github.com/pupil-labs/apriltags) |
-| **QR-code detection & decoding** | [pyzbar](https://github.com/NaturalHistoryMuseum/pyzbar) *(preferred)* / OpenCV fallback |
-| **Laser-spot detection** | OpenCV brightness thresholding + circularity filter |
-| **Multi-object tracking** | Centroid tracker with persistent IDs (Kalman-filter mode available) |
-| **Interactive GUI** | Tkinter control panel – change mode, toggle detectors, tune laser parameters live |
-| **Three operating modes** | Normal / Fast (half-resolution) / Robust (sharpening + Kalman tracking) |
+| **Detekcja i śledzenie AprilTag** | [pupil-apriltags](https://github.com/pupil-labs/apriltags) |
+| **Detekcja i dekodowanie kodów QR** | [pyzbar](https://github.com/NaturalHistoryMuseum/pyzbar) *(preferowane)* / alternatywa OpenCV |
+| **Detekcja punktu lasera** | Progowanie jasności OpenCV + filtr kołowości |
+| **Śledzenie wielu obiektów** | Tracker centroidów z trwałymi ID (tryb filtru Kalmana dostępny) |
+| **Interaktywne GUI** | Panel sterowania Tkinter – zmiana trybu, przełączanie detektorów, strojenie parametrów lasera na żywo |
+| **Trzy tryby pracy** | Normal / Fast (połowa rozdzielczości) / Robust (wyostrzanie + śledzenie Kalmana) |
 
-All detectors run on every frame and their results are unified through a
-single `CentroidTracker` that assigns stable track IDs.  Labeled objects
-(AprilTags, QR codes) are matched by their semantic identity so the same
-physical marker always keeps the same track ID even after a brief occlusion.
-Unlabeled objects (laser spots) are matched by nearest-centroid distance, with
-optional Kalman-filter prediction in ROBUST mode.
+Wszystkie detektory działają na każdej klatce, a ich wyniki są ujednolicane przez
+pojedynczy `CentroidTracker` przydzielający stabilne ID śledzenia. Obiekty
+oznaczone etykietą (AprilTags, kody QR) są dopasowywane według ich tożsamości
+semantycznej, dzięki czemu ten sam fizyczny marker zawsze zachowuje to samo ID,
+nawet po krótkim zasłonięciu. Obiekty bez etykiety (punkty lasera) są
+dopasowywane według odległości najbliższego centroidu, z opcjonalną predykcją
+filtru Kalmana w trybie ROBUST.
 
 ---
 
-## Quick start
+## Szybki start
 
-### 1 – Install system dependencies
+### 1 – Instalacja zależności systemowych
 
 ```bash
 # Ubuntu / Debian (required for QR-code detection via pyzbar)
 sudo apt-get install libzbar0
 ```
 
-### 2 – Install Python packages
+### 2 – Instalacja pakietów Python
 
 ```bash
 pip install -r requirements.txt
 ```
 
-> **Headless deployments** (no display, e.g. a Raspberry Pi running
-> without a monitor): replace `opencv-python` with
-> `opencv-python-headless` to save ~50 MB and skip GUI dependencies.
+> **Wdrożenia bezgłowe** (bez wyświetlacza, np. Raspberry Pi bez monitora):
+> zamień `opencv-python` na `opencv-python-headless`, aby zaoszczędzić ~50 MB
+> i pominąć zależności GUI.
 
-### 3 – Run
+### 3 – Uruchomienie
 
-#### CLI (OpenCV window)
+#### CLI (okno OpenCV)
 
 ```bash
 # Default camera, display window, all detectors enabled
@@ -66,27 +67,27 @@ python main.py --source path/to/video.mp4
 python main.py --headless
 ```
 
-Press **q** in the display window to quit.
+Naciśnij **q** w oknie podglądu, aby zamknąć program.
 
-#### Full GUI mode (Tkinter)
+#### Pełny tryb GUI (Tkinter)
 
 ```bash
 # Launch the full control panel GUI
 python main.py --gui
 ```
 
-In GUI mode you can:
-- Switch between Normal / Fast / Robust detection modes via the combobox
-  (or keyboard shortcuts Ctrl+1 / Ctrl+2 / Ctrl+3).
-- Toggle individual detectors (AprilTag, QR Code, Laser Spot) on and off.
-- Adjust laser-detection parameters (brightness threshold, target area,
-  sensitivity) with live sliders.
-- Enable a **threshold overlay** to visualise which pixels are above the
-  laser brightness threshold in real time.
+W trybie GUI możesz:
+- Przełączać się między trybami detekcji Normal / Fast / Robust za pomocą listy
+  rozwijanej (lub skrótów klawiszowych Ctrl+1 / Ctrl+2 / Ctrl+3).
+- Włączać i wyłączać poszczególne detektory (AprilTag, QR Code, Laser Spot).
+- Dostosowywać parametry detekcji lasera (próg jasności, docelowy obszar,
+  czułość) za pomocą suwaków na żywo.
+- Włączyć **nakładkę progową**, aby wizualizować w czasie rzeczywistym, które
+  piksele przekraczają próg jasności lasera.
 
-If tkinter is missing, install it (e.g. `sudo apt install python3-tk`).
+Jeśli brakuje tkinter, zainstaluj go (np. `sudo apt install python3-tk`).
 
-#### Operating modes
+#### Tryby pracy
 
 ```bash
 # Balanced default
@@ -99,7 +100,7 @@ python main.py --mode fast
 python main.py --mode robust
 ```
 
-#### Example: speed-oriented profile
+#### Przykład: profil zorientowany na szybkość
 
 ```bash
 python main.py --mode fast --no-apriltag --no-qr --width 320 --height 240
@@ -107,7 +108,7 @@ python main.py --mode fast --no-apriltag --no-qr --width 320 --height 240
 
 ---
 
-## Architecture
+## Architektura
 
 ```
 robo_eye_sense/
@@ -123,7 +124,7 @@ robo_eye_sense/
 main.py                  # CLI entry point
 ```
 
-### Detection pipeline (per frame)
+### Potok detekcji (na klatkę)
 
 ```
 Camera.read()
@@ -143,19 +144,19 @@ RoboEyeDetector.process_frame(frame)
 
 ---
 
-## Tuning for performance
+## Strojenie wydajności
 
-| Parameter | Default | Effect |
+| Parametr | Domyślnie | Efekt |
 |---|---|---|
-| `--width 320 --height 240` | 640×480 | Smaller frame → faster for all detectors |
-| `--laser-threshold 250` | `240` | Higher value → fewer false positives from lamps |
-| `--no-apriltag` / `--no-qr` / `--no-laser` | all on | Disable unused detectors |
-| `--mode fast` | `normal` | Downscales input by 50 % before detection (~4× fewer pixels) |
-| `--mode robust` | `normal` | Applies unsharp-mask sharpening + Kalman-filter tracking |
+| `--width 320 --height 240` | 640×480 | Mniejsza klatka → szybsze działanie wszystkich detektorów |
+| `--laser-threshold 250` | `240` | Wyższa wartość → mniej fałszywych alarmów od lamp |
+| `--no-apriltag` / `--no-qr` / `--no-laser` | wszystkie włączone | Wyłączenie nieużywanych detektorów |
+| `--mode fast` | `normal` | Skaluje wejście o 50% przed detekcją (~4× mniej pikseli) |
+| `--mode robust` | `normal` | Stosuje wyostrzanie unsharp-mask + śledzenie filtrem Kalmana |
 
 ---
 
-## Programmatic usage
+## Użycie programistyczne
 
 ```python
 import cv2
@@ -191,19 +192,19 @@ cv2.destroyAllWindows()
 
 ---
 
-## Running tests
+## Uruchamianie testów
 
 ```bash
 pip install -r requirements-dev.txt
 pytest tests/ -v
 ```
 
-> **Note:** GUI tests (``tests/test_gui.py``) require a display and the
-> ``python3-tk`` package.  On headless CI machines run them via
-> ``xvfb-run pytest tests/ -v``.
+> **Uwaga:** Testy GUI (`tests/test_gui.py`) wymagają wyświetlacza i pakietu
+> `python3-tk`. Na maszynach CI bez wyświetlacza uruchom je przez
+> `xvfb-run pytest tests/ -v`.
 
 ---
 
-## License
+## Licencja
 
-See [LICENSE](LICENSE).
+Zobacz [LICENSE](LICENSE).
