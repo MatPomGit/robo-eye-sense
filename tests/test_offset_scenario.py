@@ -16,7 +16,11 @@ import pytest
 from robo_eye_sense.offset_scenario import (
     CameraOffsetScenario,
     OffsetResult,
+    TAG_PHYSICAL_SIZE_CM,
+    _tag_apparent_size_px,
     compute_offset,
+    estimate_focal_length_px,
+    estimate_tag_distance_cm,
 )
 from robo_eye_sense.results import Detection, DetectionType
 
@@ -42,6 +46,27 @@ def _laser(center: tuple[int, int]) -> Detection:
         detection_type=DetectionType.LASER_SPOT,
         identifier=None,
         center=center,
+    )
+
+
+def _april_with_corners(
+    tag_id: str,
+    center: tuple[int, int],
+    half_size: int = 25,
+) -> Detection:
+    """AprilTag Detection with a square bounding box around *center*."""
+    cx, cy = center
+    corners = [
+        (cx - half_size, cy - half_size),
+        (cx + half_size, cy - half_size),
+        (cx + half_size, cy + half_size),
+        (cx - half_size, cy + half_size),
+    ]
+    return Detection(
+        detection_type=DetectionType.APRIL_TAG,
+        identifier=tag_id,
+        center=center,
+        corners=corners,
     )
 
 
@@ -284,3 +309,147 @@ class TestCLIScenarioOffset:
         captured = capsys.readouterr()
         assert "Camera-offset result" in captured.out
         assert "Matched AprilTags" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# Distance estimation helpers
+# ---------------------------------------------------------------------------
+
+
+class TestTagApparentSizePx:
+    """Unit tests for _tag_apparent_size_px."""
+
+    def test_empty_corners_returns_zero(self):
+        assert _tag_apparent_size_px([]) == 0.0
+
+    def test_fewer_than_four_corners_returns_zero(self):
+        assert _tag_apparent_size_px([(0, 0), (10, 0), (10, 10)]) == 0.0
+
+    def test_unit_square(self):
+        corners = [(0, 0), (10, 0), (10, 10), (0, 10)]
+        assert _tag_apparent_size_px(corners) == pytest.approx(10.0)
+
+    def test_rectangle(self):
+        corners = [(0, 0), (20, 0), (20, 10), (0, 10)]
+        # sides: 20, 10, 20, 10 → avg = 15
+        assert _tag_apparent_size_px(corners) == pytest.approx(15.0)
+
+
+class TestEstimateFocalLengthPx:
+    """Unit tests for estimate_focal_length_px."""
+
+    def test_60_degree_fov(self):
+        # f = (640 / 2) / tan(30°) ≈ 320 / 0.57735 ≈ 554.26
+        f = estimate_focal_length_px(640, 60.0)
+        assert f == pytest.approx(554.256, rel=1e-2)
+
+    def test_90_degree_fov(self):
+        # f = (640 / 2) / tan(45°) = 320
+        f = estimate_focal_length_px(640, 90.0)
+        assert f == pytest.approx(320.0, rel=1e-6)
+
+    def test_wider_frame(self):
+        f1 = estimate_focal_length_px(640, 60.0)
+        f2 = estimate_focal_length_px(1280, 60.0)
+        assert f2 == pytest.approx(2 * f1, rel=1e-6)
+
+
+class TestEstimateTagDistanceCm:
+    """Unit tests for estimate_tag_distance_cm."""
+
+    def test_no_corners_returns_none(self):
+        assert estimate_tag_distance_cm([], 500.0) is None
+
+    def test_fewer_than_four_corners_returns_none(self):
+        assert estimate_tag_distance_cm([(0, 0), (10, 0)], 500.0) is None
+
+    def test_known_distance(self):
+        # If the tag is 50 px wide and focal length is 500 px, with 5 cm tag:
+        # distance = (5 * 500) / 50 = 50 cm
+        corners = [(0, 0), (50, 0), (50, 50), (0, 50)]
+        dist = estimate_tag_distance_cm(corners, 500.0, tag_size_cm=5.0)
+        assert dist == pytest.approx(50.0)
+
+    def test_smaller_tag_appears_farther(self):
+        # Smaller apparent size → larger distance
+        corners_big = [(0, 0), (100, 0), (100, 100), (0, 100)]
+        corners_small = [(0, 0), (50, 0), (50, 50), (0, 50)]
+        dist_big = estimate_tag_distance_cm(corners_big, 500.0)
+        dist_small = estimate_tag_distance_cm(corners_small, 500.0)
+        assert dist_small > dist_big
+
+
+# ---------------------------------------------------------------------------
+# compute_offset with distance estimation
+# ---------------------------------------------------------------------------
+
+
+class TestComputeOffsetWithDistance:
+    """Tests that compute_offset populates distance fields."""
+
+    def test_per_tag_distances_populated(self):
+        ref = [_april_with_corners("1", (100, 100), half_size=25)]
+        cur = [_april_with_corners("1", (110, 110), half_size=25)]
+        result = compute_offset(ref, cur, frame_width=640)
+        assert "1" in result.per_tag_distances_cm
+        assert result.per_tag_distances_cm["1"] > 0
+
+    def test_distance_to_reference_populated(self):
+        ref = [_april_with_corners("1", (100, 100), half_size=25)]
+        cur = [_april_with_corners("1", (120, 130), half_size=25)]
+        result = compute_offset(ref, cur, frame_width=640)
+        assert result.distance_to_reference_cm is not None
+        assert result.distance_to_reference_cm > 0
+
+    def test_identical_positions_zero_distance_to_ref(self):
+        ref = [_april_with_corners("1", (200, 200), half_size=30)]
+        cur = [_april_with_corners("1", (200, 200), half_size=30)]
+        result = compute_offset(ref, cur, frame_width=640)
+        assert result.distance_to_reference_cm is not None
+        assert result.distance_to_reference_cm == pytest.approx(0.0, abs=0.01)
+
+    def test_no_corners_means_no_distances(self):
+        ref = [_april("1", (100, 100))]
+        cur = [_april("1", (110, 110))]
+        result = compute_offset(ref, cur, frame_width=640)
+        # Tags without corners can't estimate distance
+        assert len(result.per_tag_distances_cm) == 0
+        assert result.distance_to_reference_cm is None
+
+    def test_no_common_tags_still_reports_distances(self):
+        ref = [_april_with_corners("1", (100, 100))]
+        cur = [_april_with_corners("2", (200, 200))]
+        result = compute_offset(ref, cur, frame_width=640)
+        assert result.matched_tags == 0
+        # current tag "2" should still have a distance estimate
+        assert "2" in result.per_tag_distances_cm
+
+
+# ---------------------------------------------------------------------------
+# CameraOffsetScenario.compute_offset_from_detections
+# ---------------------------------------------------------------------------
+
+
+class TestComputeOffsetFromDetections:
+    """Tests for the new compute_offset_from_detections method."""
+
+    def test_without_reference_raises(self):
+        cam = MagicMock()
+        det = MagicMock()
+        s = CameraOffsetScenario(camera=cam, detector=det)
+        with pytest.raises(RuntimeError, match="No reference"):
+            s.compute_offset_from_detections([_april("1", (50, 50))])
+
+    def test_returns_offset_result(self):
+        cam = MagicMock()
+        det = MagicMock()
+        cam.read.return_value = np.zeros((100, 100, 3), dtype=np.uint8)
+        det.process_frame.return_value = [_april("1", (100, 100))]
+
+        s = CameraOffsetScenario(camera=cam, detector=det, frame_width=640)
+        s.capture_reference()
+
+        cur = [_april("1", (110, 120))]
+        result = s.compute_offset_from_detections(cur)
+        assert result.matched_tags == 1
+        assert result.offset == (-10.0, -20.0)

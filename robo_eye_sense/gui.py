@@ -12,12 +12,17 @@ Layout
 |  [x] April  |                           | --------- |
 |  [x] QR     |                           | Objects   |
 |  [x] Laser  |                           | (list)    |
-|  ---------- |                           |           |
-|  Parameters |                           |           |
-|  Threshold  |                           |           |
+|  ---------- |                           | --------- |
+|  Parameters |                           | Scenario  |
+|  Threshold  |                           | (text)    |
 |  Target area|                           |           |
 |  Sensitivity|                           |           |
 |  [ ] Overlay|                           |           |
+|  ---------- |                           |           |
+|  Scenario   |                           |           |
+|  [Start]    |                           |           |
+|  [Capture ] |                           |           |
+|  [Reset   ] |                           |           |
 |  ---------- |                           |           |
 |  [  Quit  ] |                           |           |
 +-------------+---------------------------+-----------+
@@ -54,6 +59,7 @@ from PIL import Image, ImageTk
 from . import APP_NAME, __version__
 from .camera import Camera
 from .detector import RoboEyeDetector, _compute_orientation
+from .offset_scenario import CameraOffsetScenario, OffsetResult
 from .results import Detection, DetectionMode, DetectionType
 
 # How often (milliseconds) the frame-update callback is rescheduled.
@@ -128,6 +134,11 @@ class RoboEyeSenseApp:
         self._laser_target_area = tk.IntVar(value=_init_target_area)
         self._laser_sensitivity = tk.IntVar(value=_init_sensitivity)
         self._show_threshold_overlay = tk.BooleanVar(value=False)
+
+        # Scenario state
+        self._scenario: Optional[CameraOffsetScenario] = None
+        self._scenario_active = False
+        self._last_offset_result: Optional[OffsetResult] = None
 
         # Build the UI
         self._build_ui()
@@ -304,6 +315,33 @@ class RoboEyeSenseApp:
             variable=self._show_threshold_overlay,
         ).pack(anchor="w", pady=(8, 0))
 
+        # ── Scenario ─────────────────────────────────────────────────────
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=8)
+        ttk.Label(parent, text="Scenario", font=("", 9, "bold")).pack(anchor="w")
+
+        self._scenario_start_btn = ttk.Button(
+            parent,
+            text="Start scenario",
+            command=self._on_scenario_start,
+        )
+        self._scenario_start_btn.pack(fill="x", pady=(4, 2))
+
+        self._scenario_capture_btn = ttk.Button(
+            parent,
+            text="Capture reference",
+            command=self._on_scenario_capture_reference,
+            state="disabled",
+        )
+        self._scenario_capture_btn.pack(fill="x", pady=2)
+
+        self._scenario_reset_btn = ttk.Button(
+            parent,
+            text="Reset reference",
+            command=self._on_scenario_reset,
+            state="disabled",
+        )
+        self._scenario_reset_btn.pack(fill="x", pady=2)
+
         # ── Quit button ───────────────────────────────────────────────────
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=12)
         ttk.Button(parent, text="Quit", command=self._on_close).pack(fill="x")
@@ -344,18 +382,41 @@ class RoboEyeSenseApp:
         )
 
         list_frame = ttk.Frame(parent)
-        list_frame.pack(fill="both", expand=True)
+        list_frame.pack(fill="x")
         scrollbar = ttk.Scrollbar(list_frame, orient="vertical")
         self._detections_list = tk.Listbox(
             list_frame,
             yscrollcommand=scrollbar.set,
             font=("Courier", 8),
             selectmode=tk.SINGLE,
-            height=20,
+            height=10,
         )
         scrollbar.config(command=self._detections_list.yview)
         self._detections_list.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
+
+        # Scenario information panel
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=8)
+        ttk.Label(parent, text="Scenario", font=("", 9, "bold")).pack(
+            anchor="w"
+        )
+
+        scenario_frame = ttk.Frame(parent)
+        scenario_frame.pack(fill="both", expand=True)
+        scenario_scroll = ttk.Scrollbar(scenario_frame, orient="vertical")
+        self._scenario_text = tk.Text(
+            scenario_frame,
+            yscrollcommand=scenario_scroll.set,
+            font=("Courier", 8),
+            wrap="word",
+            height=10,
+            state="disabled",
+            bg="#f0f0f0",
+        )
+        scenario_scroll.config(command=self._scenario_text.yview)
+        self._scenario_text.pack(side="left", fill="both", expand=True)
+        scenario_scroll.pack(side="right", fill="y")
+        self._set_scenario_text("Scenario not started.\nClick 'Start scenario' to begin.")
 
     # ──────────────────────────────────────────────────────────────────────
     # Control callbacks
@@ -426,6 +487,99 @@ class RoboEyeSenseApp:
         laser = self.detector.laser_detector
         if laser is not None:
             laser.sensitivity = val
+
+    # ── Scenario callbacks ────────────────────────────────────────────────
+
+    def _set_scenario_text(self, text: str) -> None:
+        """Replace the content of the scenario text widget."""
+        self._scenario_text.config(state="normal")
+        self._scenario_text.delete("1.0", tk.END)
+        self._scenario_text.insert("1.0", text)
+        self._scenario_text.config(state="disabled")
+
+    def _on_scenario_start(self) -> None:
+        """Start or stop the offset-calibration scenario."""
+        if self._scenario_active:
+            # Stop the scenario
+            self._scenario_active = False
+            self._scenario = None
+            self._last_offset_result = None
+            self._scenario_start_btn.config(text="Start scenario")
+            self._scenario_capture_btn.config(state="disabled")
+            self._scenario_reset_btn.config(state="disabled")
+            self._set_scenario_text(
+                "Scenario not started.\n"
+                "Click 'Start scenario' to begin."
+            )
+        else:
+            # Start the scenario
+            self._scenario = CameraOffsetScenario(
+                camera=self.camera,
+                detector=self.detector,
+                frame_width=self.camera.actual_width,
+            )
+            self._scenario_active = True
+            self._last_offset_result = None
+            self._scenario_start_btn.config(text="Stop scenario")
+            self._scenario_capture_btn.config(state="normal")
+            self._scenario_reset_btn.config(state="disabled")
+            self._set_scenario_text(
+                "Scenario started.\n\n"
+                "STEP 1: Position the camera at\n"
+                "the REFERENCE position with\n"
+                "AprilTags visible.\n\n"
+                "Then click 'Capture reference'."
+            )
+
+    def _on_scenario_capture_reference(self) -> None:
+        """Capture the current detections as the reference frame."""
+        if self._scenario is None:
+            return
+        # Use the last detections from the frame loop instead of
+        # capturing a separate frame.  This keeps the UI responsive
+        # and avoids consuming a camera frame outside the main loop.
+        detections = self._last_detections
+        april_count = sum(
+            1
+            for d in detections
+            if d.detection_type == DetectionType.APRIL_TAG
+        )
+        # Store as reference via public API
+        self._scenario.set_reference(detections)
+        self._scenario_reset_btn.config(state="normal")
+
+        if april_count == 0:
+            self._set_scenario_text(
+                "WARNING: No AprilTags found in\n"
+                "reference frame!\n\n"
+                "The offset will be (0, 0).\n"
+                "Try repositioning and click\n"
+                "'Reset reference' → 'Capture\n"
+                "reference' again."
+            )
+        else:
+            self._set_scenario_text(
+                f"Reference captured:\n"
+                f"  {april_count} AprilTag(s) found.\n\n"
+                "STEP 2: Move the camera.\n"
+                "Offset is computed continuously.\n\n"
+                "Waiting for frames…"
+            )
+
+    def _on_scenario_reset(self) -> None:
+        """Reset the scenario reference to allow re-capture."""
+        if self._scenario is None:
+            return
+        self._scenario.reset()
+        self._last_offset_result = None
+        self._scenario_reset_btn.config(state="disabled")
+        self._set_scenario_text(
+            "Reference cleared.\n\n"
+            "STEP 1: Position the camera at\n"
+            "the REFERENCE position with\n"
+            "AprilTags visible.\n\n"
+            "Then click 'Capture reference'."
+        )
 
     # ──────────────────────────────────────────────────────────────────────
     # Frame update loop
@@ -524,7 +678,7 @@ class RoboEyeSenseApp:
         self.root.after(_UPDATE_INTERVAL_MS, self._update_frame)
 
     def _update_info_panel(self, detections: List[Detection]) -> None:
-        """Refresh the camera-parameters and detections-list widgets."""
+        """Refresh the camera-parameters, detections-list, and scenario widgets."""
         # Camera info
         self._cam_fps_var.set(f"FPS: {self._fps_display:.1f}")
         self._cam_res_var.set(
@@ -544,6 +698,44 @@ class RoboEyeSenseApp:
                 f"  X:{cx}  Y:{cy}  θ:{angle:.1f}°"
             )
             self._detections_list.insert(tk.END, line)
+
+        # Scenario: continuous offset computation
+        if self._scenario_active and self._scenario is not None and self._scenario.has_reference:
+            try:
+                result = self._scenario.compute_offset_from_detections(detections)
+                self._last_offset_result = result
+                self._update_scenario_display(result)
+            except RuntimeError:
+                pass
+
+    def _update_scenario_display(self, result: OffsetResult) -> None:
+        """Refresh the scenario text widget with the latest offset data."""
+        lines = []
+        dx, dy = result.offset
+        lines.append(f"OFFSET (dx, dy):")
+        lines.append(f"  ({dx:+.1f}, {dy:+.1f}) px")
+        lines.append(f"Matched tags: {result.matched_tags}")
+        lines.append("")
+
+        if result.distance_to_reference_cm is not None:
+            lines.append("Est. distance to reference:")
+            lines.append(f"  {result.distance_to_reference_cm:.1f} cm")
+            lines.append("")
+
+        if result.per_tag_offsets:
+            lines.append("Per-tag offsets:")
+            for tag_id in sorted(result.per_tag_offsets):
+                tdx, tdy = result.per_tag_offsets[tag_id]
+                lines.append(f"  tag {tag_id:>4s}: ({tdx:+.1f}, {tdy:+.1f}) px")
+            lines.append("")
+
+        if result.per_tag_distances_cm:
+            lines.append("Est. distance to tags:")
+            for tag_id in sorted(result.per_tag_distances_cm):
+                dist = result.per_tag_distances_cm[tag_id]
+                lines.append(f"  tag {tag_id:>4s}: {dist:.1f} cm")
+
+        self._set_scenario_text("\n".join(lines))
 
     # ──────────────────────────────────────────────────────────────────────
     # Lifecycle
