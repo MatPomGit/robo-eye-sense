@@ -20,9 +20,31 @@ even when OpenCV is not installed or fails to initialise.
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING, Any
 
 from .results import Detection, DetectionMode, DetectionType
+
+
+def _fix_qt_font_dir() -> None:
+    """Point Qt at system fonts so OpenCV's Qt back-end doesn't warn.
+
+    When ``opencv-python`` is built with Qt support, Qt may emit::
+
+        QFontDatabase: Cannot find font directory …/cv2/qt/fonts
+
+    Setting :envvar:`QT_QPA_FONTDIR` to a valid system font directory
+    before ``cv2`` is imported silences the warning.
+    """
+    if "QT_QPA_FONTDIR" in os.environ:
+        return
+    for candidate in ("/usr/share/fonts", "/usr/local/share/fonts"):
+        if os.path.isdir(candidate):
+            os.environ["QT_QPA_FONTDIR"] = candidate
+            return
+
+
+_fix_qt_font_dir()
 
 if TYPE_CHECKING:
     from .detector import RoboEyeDetector

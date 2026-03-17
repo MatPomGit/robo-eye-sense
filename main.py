@@ -44,11 +44,11 @@ import argparse
 import sys
 import time
 
-import cv2
-
 from robo_eye_sense import APP_NAME, RoboEyeDetector, __version__
 from robo_eye_sense.camera import Camera
 from robo_eye_sense.results import DetectionMode, DetectionType
+
+import cv2  # noqa: E402  – imported after robo_eye_sense to apply Qt font fix
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
