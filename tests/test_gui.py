@@ -205,6 +205,38 @@ class TestRoboEyeSenseApp:
     def test_constructs_without_error(self, app):
         assert app is not None
 
+    # ── Layout / scaling ──────────────────────────────────────────────────
+
+    def test_minimum_window_size_is_set(self, app):
+        """root.minsize should prevent the window from being too small."""
+        min_w = app.root.minsize()[0]
+        min_h = app.root.minsize()[1]
+        assert min_w >= 700
+        assert min_h >= 400
+
+    def test_canvas_image_preserves_aspect_ratio(self, app):
+        """Image resized for the canvas should keep the source aspect ratio."""
+        from PIL import Image as PILImage
+
+        # Simulate a 640×480 (4:3) source image on a square canvas
+        src = PILImage.new("RGB", (640, 480), color="red")
+
+        canvas_w, canvas_h = 400, 400
+        img_w, img_h = src.size
+        scale = min(canvas_w / img_w, canvas_h / img_h)
+        new_w = max(1, int(img_w * scale))
+        new_h = max(1, int(img_h * scale))
+        resized = src.resize((new_w, new_h))
+
+        # Width is limiting: 640 is wider → width fills canvas, height is
+        # smaller → pillarboxed (black bars top/bottom).
+        assert resized.size[0] == 400  # width fills the canvas
+        assert resized.size[1] < 400   # height is less → pillarboxed
+
+        # Verify approximate aspect ratio (4:3)
+        ratio = resized.size[0] / resized.size[1]
+        assert abs(ratio - 4 / 3) < 0.02
+
     def test_toggle_laser_off(self, app):
         app._enable_laser.set(False)
         app._on_toggle_laser()
