@@ -544,8 +544,8 @@ class RoboEyeSenseApp:
             for d in detections
             if d.detection_type == DetectionType.APRIL_TAG
         )
-        # Store as reference directly
-        self._scenario._reference_detections = list(detections)
+        # Store as reference via public API
+        self._scenario.set_reference(detections)
         self._scenario_reset_btn.config(state="normal")
 
         if april_count == 0:

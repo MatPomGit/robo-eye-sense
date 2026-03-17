@@ -337,3 +337,51 @@ class TestRoboEyeSenseApp:
         assert app.detector.mode == DetectionMode.NORMAL
 
         app.root.withdraw()
+
+
+    # ── Scenario callbacks ────────────────────────────────────────────────
+
+    def test_scenario_initially_inactive(self, app):
+        assert app._scenario_active is False
+        assert app._scenario is None
+
+    def test_scenario_start_activates(self, app):
+        app._on_scenario_start()
+        assert app._scenario_active is True
+        assert app._scenario is not None
+        assert "Stop" in app._scenario_start_btn.cget("text")
+
+    def test_scenario_stop_deactivates(self, app):
+        app._on_scenario_start()
+        app._on_scenario_start()  # toggle off
+        assert app._scenario_active is False
+        assert app._scenario is None
+        assert "Start" in app._scenario_start_btn.cget("text")
+
+    def test_scenario_capture_stores_reference(self, app):
+        app._on_scenario_start()
+        # Simulate some detections being available
+        from robo_eye_sense.results import Detection, DetectionType
+        app._last_detections = [
+            Detection(
+                detection_type=DetectionType.APRIL_TAG,
+                identifier="42",
+                center=(100, 100),
+                corners=[(75, 75), (125, 75), (125, 125), (75, 125)],
+            )
+        ]
+        app._on_scenario_capture_reference()
+        assert app._scenario.has_reference is True
+        assert str(app._scenario_reset_btn.cget("state")) != "disabled"
+
+    def test_scenario_reset_clears_reference(self, app):
+        app._on_scenario_start()
+        app._last_detections = []
+        app._on_scenario_capture_reference()
+        app._on_scenario_reset()
+        assert app._scenario.has_reference is False
+
+    def test_scenario_text_updates(self, app):
+        app._set_scenario_text("Hello test")
+        content = app._scenario_text.get("1.0", "end-1c")
+        assert "Hello test" in content

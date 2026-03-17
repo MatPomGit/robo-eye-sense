@@ -124,7 +124,8 @@ def estimate_focal_length_px(frame_width: int, hfov_deg: float = _DEFAULT_HFOV_D
     frame_width:
         Width of the captured image in pixels.
     hfov_deg:
-        Horizontal field-of-view of the camera in degrees.
+        Horizontal field-of-view of the camera in degrees.  Defaults to
+        60.0°, a reasonable approximation for most consumer webcams.
 
     Returns
     -------
@@ -261,6 +262,9 @@ def compute_offset(
             if t in cur_corners and _tag_apparent_size_px(cur_corners[t]) > 0
         ]
         if matched_dists and matched_sizes:
+            # Average cm-per-pixel ratio across matched tags: how many
+            # real-world centimetres each pixel represents at the tags'
+            # average distance from the camera.
             avg_cm_per_px = sum(
                 tag_size_cm / s for s in matched_sizes
             ) / len(matched_sizes)
@@ -340,6 +344,16 @@ class CameraOffsetScenario:
         detections = self.detector.process_frame(frame)  # type: ignore[attr-defined]
         self._reference_detections = detections
         return detections
+
+    def set_reference(self, detections: List[Detection]) -> None:
+        """Set the reference detections directly (e.g. from the GUI loop).
+
+        Parameters
+        ----------
+        detections:
+            Detections to use as the reference frame.
+        """
+        self._reference_detections = list(detections)
 
     def compute_current_offset(self) -> OffsetResult:
         """Capture a frame and compute the offset relative to the stored reference.
