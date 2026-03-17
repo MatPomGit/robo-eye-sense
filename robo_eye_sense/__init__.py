@@ -23,6 +23,7 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING, Any
 
+from .marker_map import MarkerMap, MarkerPose3D, RobotPose3D
 from .results import Detection, DetectionMode, DetectionType
 
 
@@ -48,8 +49,19 @@ _fix_qt_font_dir()
 
 if TYPE_CHECKING:
     from .detector import RoboEyeDetector
+    from .marker_map import SlamCalibrator
 
-__all__ = ["APP_NAME", "RoboEyeDetector", "Detection", "DetectionMode", "DetectionType", "__version__"]
+__all__ = [
+    "APP_NAME",
+    "MarkerMap",
+    "MarkerPose3D",
+    "RobotPose3D",
+    "RoboEyeDetector",
+    "Detection",
+    "DetectionMode",
+    "DetectionType",
+    "__version__",
+]
 APP_NAME = "robo-eye-sense"
 __version__ = "0.2.0"
 
@@ -71,4 +83,10 @@ def __getattr__(name: str) -> Any:
             ) from exc
 
         return RoboEyeDetector
+
+    if name == "SlamCalibrator":
+        from .marker_map import SlamCalibrator
+
+        return SlamCalibrator
+
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

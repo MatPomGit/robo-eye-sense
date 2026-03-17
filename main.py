@@ -124,12 +124,24 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--scenario",
-        choices=["offset"],
+        choices=["offset", "slam"],
         default=None,
         help=(
             "Run a predefined scenario instead of the normal detection loop. "
             "'offset' – capture a reference frame, then compute the camera "
-            "displacement vector after the camera has been moved."
+            "displacement vector after the camera has been moved. "
+            "'slam' – incrementally build a marker map from the camera feed, "
+            "estimating the 3-D pose of every visible AprilTag and the robot."
+        ),
+    )
+    parser.add_argument(
+        "--map-file",
+        default=None,
+        metavar="FILE",
+        help=(
+            "Path to a marker-map JSON file.  In 'slam' scenario mode the "
+            "built map is saved here on exit.  When used outside a scenario "
+            "the map is loaded for robot-pose estimation."
         ),
     )
     return parser.parse_args(argv)
@@ -253,6 +265,100 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         finally:
             if recorder is not None:
                 recorder.stop()
+        return 0
+
+    # ── SLAM scenario mode ────────────────────────────────────────────────
+    if args.scenario == "slam":
+        from robo_eye_sense.marker_map import SlamCalibrator
+
+        calibrator = SlamCalibrator(tag_size_cm=5.0)
+
+        recorder = None
+        if args.record:
+            from robo_eye_sense.recorder import VideoRecorder
+
+            recorder = VideoRecorder(
+                args.record,
+                width=cam.actual_width,
+                height=cam.actual_height,
+                fps=cam.actual_fps or 30.0,
+            )
+
+        try:
+            with cam:
+                if recorder is not None:
+                    recorder.start()
+                    print(f"Recording to {args.record}")
+
+                frame_idx = 0
+                while True:
+                    frame = cam.read()
+                    if frame is None:
+                        break
+
+                    detections = detector.process_frame(frame)
+                    robot_pose = calibrator.process_detections(detections)
+                    frame_idx += 1
+
+                    if args.headless:
+                        if robot_pose.visible_markers > 0:
+                            rx, ry, rz = robot_pose.position
+                            print(
+                                f"[frame {frame_idx}] "
+                                f"robot=({rx:+.1f}, {ry:+.1f}, {rz:+.1f}) cm  "
+                                f"markers_in_map={len(calibrator.marker_map)}  "
+                                f"visible={robot_pose.visible_markers}"
+                            )
+                        if recorder is not None:
+                            vis = detector.draw_detections(frame.copy(), detections)
+                            recorder.write_frame(vis)
+                    else:
+                        vis = detector.draw_detections(frame.copy(), detections)
+                        # Overlay SLAM info
+                        rx, ry, rz = robot_pose.position
+                        info = (
+                            f"SLAM: map={len(calibrator.marker_map)} tags  "
+                            f"robot=({rx:+.1f},{ry:+.1f},{rz:+.1f})"
+                        )
+                        cv2.putText(
+                            vis, info, (8, 24),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                            (0, 255, 255), 1, cv2.LINE_AA,
+                        )
+                        if recorder is not None:
+                            recorder.write_frame(vis)
+                        cv2.imshow("RoboEyeSense – SLAM", vis)
+                        if cv2.waitKey(1) & 0xFF == ord("q"):
+                            break
+
+                # Save marker map
+                mmap = calibrator.marker_map
+                map_path = args.map_file or "marker_map.json"
+                mmap.save(map_path)
+                print(f"\n{'='*50}")
+                print("SLAM calibration result")
+                print(f"{'='*50}")
+                print(f"Frames processed  : {calibrator.frame_count}")
+                print(f"Markers in map    : {len(mmap)}")
+                for m in mmap.markers():
+                    px, py, pz = m.position
+                    r, p, y = m.orientation
+                    print(
+                        f"  tag {m.marker_id:>4s}: "
+                        f"pos=({px:+.1f}, {py:+.1f}, {pz:+.1f}) cm  "
+                        f"ori=({r:+.1f}, {p:+.1f}, {y:+.1f})°  "
+                        f"obs={m.observations}"
+                    )
+                print(f"Map saved to      : {map_path}")
+                print(f"{'='*50}")
+        except RuntimeError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+        finally:
+            if recorder is not None:
+                recorder.stop()
+            if not args.headless:
+                cv2.destroyAllWindows()
         return 0
 
     # ── GUI mode ──────────────────────────────────────────────────────────
