@@ -30,6 +30,11 @@ Run headless (no display window; print detections to stdout)::
 
     python main.py --headless
 
+Run the camera-offset calibration scenario – determine how much the camera
+has moved relative to a reference position by comparing AprilTag markers::
+
+    python main.py --scenario offset
+
 Press **q** to quit the OpenCV display window (non-GUI, non-headless mode).
 """
 
@@ -43,7 +48,7 @@ import cv2
 
 from robo_eye_sense import APP_NAME, RoboEyeDetector, __version__
 from robo_eye_sense.camera import Camera
-from robo_eye_sense.results import DetectionMode
+from robo_eye_sense.results import DetectionMode, DetectionType
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -99,6 +104,16 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Launch the full tkinter GUI (overrides --headless).",
     )
+    parser.add_argument(
+        "--scenario",
+        choices=["offset"],
+        default=None,
+        help=(
+            "Run a predefined scenario instead of the normal detection loop. "
+            "'offset' – capture a reference frame, then compute the camera "
+            "displacement vector after the camera has been moved."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -130,6 +145,54 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
     except RuntimeError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
+
+    # ── Scenario mode ─────────────────────────────────────────────────────
+    if args.scenario == "offset":
+        from robo_eye_sense.offset_scenario import CameraOffsetScenario
+
+        scenario = CameraOffsetScenario(camera=cam, detector=detector)
+        try:
+            with cam:
+                input(
+                    "Place the camera at the REFERENCE position with AprilTags "
+                    "visible, then press Enter…"
+                )
+                ref = scenario.capture_reference()
+                april_ref = [
+                    d for d in ref if d.detection_type == DetectionType.APRIL_TAG
+                ]
+                print(
+                    f"Reference captured: {len(april_ref)} AprilTag(s) detected."
+                )
+                if not april_ref:
+                    print(
+                        "WARNING: no AprilTags found in reference frame. "
+                        "The offset will be (0, 0).",
+                        file=sys.stderr,
+                    )
+
+                input(
+                    "Move the camera to the NEW position, then press Enter…"
+                )
+                result = scenario.compute_current_offset()
+
+                print(f"\n{'='*50}")
+                print("Camera-offset result")
+                print(f"{'='*50}")
+                print(f"Matched AprilTags : {result.matched_tags}")
+                dx, dy = result.offset
+                print(f"Offset (dx, dy)   : ({dx:+.1f}, {dy:+.1f}) px")
+                if result.per_tag_offsets:
+                    print("\nPer-tag offsets:")
+                    for tag_id, (tdx, tdy) in sorted(
+                        result.per_tag_offsets.items()
+                    ):
+                        print(f"  tag {tag_id:>4s}: ({tdx:+.1f}, {tdy:+.1f}) px")
+                print(f"{'='*50}")
+        except RuntimeError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+        return 0
 
     # ── GUI mode ──────────────────────────────────────────────────────────
     if args.gui:
