@@ -1071,7 +1071,7 @@ class RoboEyeSenseApp:
         """Refresh the scenario text widget with the latest offset data."""
         lines = []
         dx, dy = result.offset
-        lines.append(f"OFFSET (dx, dy):")
+        lines.append("OFFSET (dx, dy):")
         lines.append(f"  ({dx:+.1f}, {dy:+.1f}) px")
         lines.append(f"Matched tags: {result.matched_tags}")
         lines.append("")

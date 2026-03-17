@@ -15,7 +15,7 @@ This Kalman mode is automatically activated in ROBUST pipeline mode.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Set, Tuple
 
 import numpy as np
 
@@ -350,4 +350,3 @@ class CentroidTracker:
         # Register new tracks for unmatched detections
         for col in set(range(len(detections))) - used_cols:
             self._register_unlabeled(detections[col])
-
