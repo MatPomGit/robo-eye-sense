@@ -30,10 +30,22 @@ Run headless (no display window; print detections to stdout)::
 
     python main.py --headless
 
+Record the live camera feed to an MP4 file::
+
+    python main.py --record output.mp4
+
+Record in headless mode (no display, but save video)::
+
+    python main.py --headless --record output.mp4
+
 Run the camera-offset calibration scenario – determine how much the camera
 has moved relative to a reference position by comparing AprilTag markers::
 
     python main.py --scenario offset
+
+Run the scenario in headless mode (no display)::
+
+    python main.py --scenario offset --headless
 
 Press **q** to quit the OpenCV display window (non-GUI, non-headless mode).
 """
@@ -105,6 +117,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Launch the full tkinter GUI (overrides --headless).",
     )
     parser.add_argument(
+        "--record",
+        default=None,
+        metavar="FILE",
+        help="Record the video feed to FILE (e.g. output.mp4).",
+    )
+    parser.add_argument(
         "--scenario",
         choices=["offset"],
         default=None,
@@ -151,30 +169,70 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         from robo_eye_sense.offset_scenario import CameraOffsetScenario
 
         scenario = CameraOffsetScenario(camera=cam, detector=detector)
+
+        # Optional recording during scenario
+        recorder = None
+        if args.record:
+            from robo_eye_sense.recorder import VideoRecorder
+
+            recorder = VideoRecorder(
+                args.record,
+                width=cam.actual_width,
+                height=cam.actual_height,
+                fps=cam.actual_fps or 30.0,
+            )
+
         try:
             with cam:
-                input(
-                    "Place the camera at the REFERENCE position with AprilTags "
-                    "visible, then press Enter…"
-                )
-                ref = scenario.capture_reference()
-                april_ref = [
-                    d for d in ref if d.detection_type == DetectionType.APRIL_TAG
-                ]
-                print(
-                    f"Reference captured: {len(april_ref)} AprilTag(s) detected."
-                )
-                if not april_ref:
-                    print(
-                        "WARNING: no AprilTags found in reference frame. "
-                        "The offset will be (0, 0).",
-                        file=sys.stderr,
-                    )
+                if recorder is not None:
+                    recorder.start()
+                    print(f"Recording to {args.record}")
 
-                input(
-                    "Move the camera to the NEW position, then press Enter…"
-                )
-                result = scenario.compute_current_offset()
+                if args.headless:
+                    # Headless scenario: capture reference immediately,
+                    # then compute offset on next frame and exit.
+                    ref = scenario.capture_reference()
+                    april_ref = [
+                        d
+                        for d in ref
+                        if d.detection_type == DetectionType.APRIL_TAG
+                    ]
+                    print(
+                        f"Reference captured: {len(april_ref)} AprilTag(s) detected."
+                    )
+                    if not april_ref:
+                        print(
+                            "WARNING: no AprilTags found in reference frame. "
+                            "The offset will be (0, 0).",
+                            file=sys.stderr,
+                        )
+
+                    result = scenario.compute_current_offset()
+                else:
+                    input(
+                        "Place the camera at the REFERENCE position with AprilTags "
+                        "visible, then press Enter…"
+                    )
+                    ref = scenario.capture_reference()
+                    april_ref = [
+                        d
+                        for d in ref
+                        if d.detection_type == DetectionType.APRIL_TAG
+                    ]
+                    print(
+                        f"Reference captured: {len(april_ref)} AprilTag(s) detected."
+                    )
+                    if not april_ref:
+                        print(
+                            "WARNING: no AprilTags found in reference frame. "
+                            "The offset will be (0, 0).",
+                            file=sys.stderr,
+                        )
+
+                    input(
+                        "Move the camera to the NEW position, then press Enter…"
+                    )
+                    result = scenario.compute_current_offset()
 
                 print(f"\n{'='*50}")
                 print("Camera-offset result")
@@ -192,6 +250,9 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         except RuntimeError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 1
+        finally:
+            if recorder is not None:
+                recorder.stop()
         return 0
 
     # ── GUI mode ──────────────────────────────────────────────────────────
@@ -209,17 +270,35 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
 
         root = tk.Tk()
         with cam:
-            app = RoboEyeSenseApp(root, cam, detector)
+            app = RoboEyeSenseApp(
+                root, cam, detector,
+                initial_record_path=args.record,
+            )
             app.run()
         return 0
 
     # ── Headless / cv2.imshow mode ────────────────────────────────────────
+    recorder = None
+    if args.record:
+        from robo_eye_sense.recorder import VideoRecorder
+
+        recorder = VideoRecorder(
+            args.record,
+            width=cam.actual_width,
+            height=cam.actual_height,
+            fps=cam.actual_fps or 30.0,
+        )
+
     fps_counter = 0
     fps_display = 0.0
     t_fps = time.perf_counter()
 
     try:
         with cam:
+            if recorder is not None:
+                recorder.start()
+                print(f"Recording to {args.record}")
+
             while True:
                 frame = cam.read()
                 if frame is None:
@@ -239,6 +318,9 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                 if args.headless:
                     for d in detections:
                         print(d)
+                    if recorder is not None:
+                        vis = detector.draw_detections(frame.copy(), detections)
+                        recorder.write_frame(vis)
                 else:
                     vis = detector.draw_detections(frame.copy(), detections)
                     cv2.putText(
@@ -251,10 +333,15 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                         1,
                         cv2.LINE_AA,
                     )
+                    if recorder is not None:
+                        recorder.write_frame(vis)
                     cv2.imshow("RoboEyeSense", vis)
                     if cv2.waitKey(1) & 0xFF == ord("q"):
                         break
     finally:
+        if recorder is not None:
+            recorder.stop()
+            print(f"Recording saved to {args.record}")
         if not args.headless:
             cv2.destroyAllWindows()
 

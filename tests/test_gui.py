@@ -385,3 +385,44 @@ class TestRoboEyeSenseApp:
         app._set_scenario_text("Hello test")
         content = app._scenario_text.get("1.0", "end-1c")
         assert "Hello test" in content
+
+    # ── Recording callbacks ───────────────────────────────────────────────
+
+    def test_recording_initially_inactive(self, app):
+        assert app._recorder is None
+        assert "Start" in app._record_btn.cget("text")
+
+    def test_start_recording_with_initial_path(self, app, tmp_path):
+        """When initial_record_path is set the file dialog is skipped."""
+        path = str(tmp_path / "test_output.mp4")
+        app._record_path = path
+        app._start_recording()
+        assert app._recorder is not None
+        assert app._recorder.is_recording is True
+        assert "Stop" in app._record_btn.cget("text")
+        app._stop_recording()
+
+    def test_stop_recording(self, app, tmp_path):
+        path = str(tmp_path / "test_output.mp4")
+        app._record_path = path
+        app._start_recording()
+        app._stop_recording()
+        assert app._recorder is None
+        assert "Start" in app._record_btn.cget("text")
+
+    def test_toggle_recording_starts_and_stops(self, app, tmp_path):
+        path = str(tmp_path / "toggle.mp4")
+        app._record_path = path
+        app._on_toggle_recording()  # start
+        assert app._recorder is not None
+        app._on_toggle_recording()  # stop
+        assert app._recorder is None
+
+    def test_on_close_stops_recording(self, app, tmp_path):
+        path = str(tmp_path / "close_test.mp4")
+        app._record_path = path
+        app._start_recording()
+        assert app._recorder is not None
+        app.root.destroy = MagicMock()
+        app._on_close()
+        assert app._recorder is None

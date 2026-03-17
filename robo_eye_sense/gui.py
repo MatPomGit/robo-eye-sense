@@ -60,6 +60,7 @@ from . import APP_NAME, __version__
 from .camera import Camera
 from .detector import RoboEyeDetector, _compute_orientation
 from .offset_scenario import CameraOffsetScenario, OffsetResult
+from .recorder import VideoRecorder
 from .results import Detection, DetectionMode, DetectionType
 
 # How often (milliseconds) the frame-update callback is rescheduled.
@@ -100,6 +101,7 @@ class RoboEyeSenseApp:
         root: tk.Tk,
         camera: Camera,
         detector: RoboEyeDetector,
+        initial_record_path: Optional[str] = None,
     ) -> None:
         self.root = root
         self.camera = camera
@@ -139,6 +141,10 @@ class RoboEyeSenseApp:
         self._scenario: Optional[CameraOffsetScenario] = None
         self._scenario_active = False
         self._last_offset_result: Optional[OffsetResult] = None
+
+        # Recording state
+        self._recorder: Optional[VideoRecorder] = None
+        self._record_path: Optional[str] = initial_record_path
 
         # Build the UI
         self._build_ui()
@@ -341,6 +347,24 @@ class RoboEyeSenseApp:
             state="disabled",
         )
         self._scenario_reset_btn.pack(fill="x", pady=2)
+
+        # ── Recording ─────────────────────────────────────────────────────
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=8)
+        ttk.Label(parent, text="Recording", font=("", 9, "bold")).pack(anchor="w")
+
+        self._record_btn = ttk.Button(
+            parent,
+            text="Start recording",
+            command=self._on_toggle_recording,
+        )
+        self._record_btn.pack(fill="x", pady=(4, 2))
+
+        self._record_status_var = tk.StringVar(value="Not recording")
+        ttk.Label(
+            parent,
+            textvariable=self._record_status_var,
+            font=("", 8, "italic"),
+        ).pack(anchor="w")
 
         # ── Quit button ───────────────────────────────────────────────────
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=12)
@@ -581,6 +605,52 @@ class RoboEyeSenseApp:
             "Then click 'Capture reference'."
         )
 
+    # ── Recording callbacks ───────────────────────────────────────────────
+
+    def _on_toggle_recording(self) -> None:
+        """Start or stop video recording."""
+        if self._recorder is not None and self._recorder.is_recording:
+            self._stop_recording()
+        else:
+            self._start_recording()
+
+    def _start_recording(self) -> None:
+        """Prompt for a file path and begin recording."""
+        from tkinter import filedialog
+
+        if self._record_path:
+            path = self._record_path
+            self._record_path = None  # use only once from CLI
+        else:
+            path = filedialog.asksaveasfilename(
+                title="Save recording as",
+                defaultextension=".mp4",
+                filetypes=[("MP4 video", "*.mp4"), ("All files", "*.*")],
+            )
+        if not path:
+            return
+        try:
+            self._recorder = VideoRecorder(
+                path,
+                width=self.camera.actual_width,
+                height=self.camera.actual_height,
+                fps=self.camera.actual_fps or 30.0,
+            )
+            self._recorder.start()
+            self._record_btn.config(text="Stop recording")
+            self._record_status_var.set(f"Recording: {path}")
+        except RuntimeError as exc:
+            self._record_status_var.set(f"Error: {exc}")
+
+    def _stop_recording(self) -> None:
+        """Finish recording and release the writer."""
+        if self._recorder is not None:
+            path = self._recorder.output_path
+            self._recorder.stop()
+            self._recorder = None
+            self._record_btn.config(text="Start recording")
+            self._record_status_var.set(f"Saved: {path}")
+
     # ──────────────────────────────────────────────────────────────────────
     # Frame update loop
     # ──────────────────────────────────────────────────────────────────────
@@ -645,6 +715,10 @@ class RoboEyeSenseApp:
             cv2.LINE_AA,
         )
 
+        # Record the annotated frame (before canvas resize)
+        if self._recorder is not None and self._recorder.is_recording:
+            self._recorder.write_frame(vis)
+
         # Convert BGR → RGB → PIL → ImageTk for the canvas
         rgb = cv2.cvtColor(vis, cv2.COLOR_BGR2RGB)
         pil_img = Image.fromarray(rgb)
@@ -670,8 +744,9 @@ class RoboEyeSenseApp:
         # Status bar
         n = len(detections)
         mode_label = _MODE_DISPLAY_INV.get(self.detector.mode, "")
+        rec_label = "  |  ● REC" if (self._recorder is not None and self._recorder.is_recording) else ""
         self._status_var.set(
-            f"FPS: {self._fps_display:.1f}  |  Mode: {mode_label}  |  Detections: {n}"
+            f"FPS: {self._fps_display:.1f}  |  Mode: {mode_label}  |  Detections: {n}{rec_label}"
         )
 
         # Schedule next update
@@ -742,8 +817,9 @@ class RoboEyeSenseApp:
     # ──────────────────────────────────────────────────────────────────────
 
     def _on_close(self) -> None:
-        """Handle window-close event: stop the update loop and destroy."""
+        """Handle window-close event: stop recording, update loop, and destroy."""
         self._running = False
+        self._stop_recording()
         self.root.destroy()
 
     def run(self) -> None:
