@@ -163,8 +163,13 @@ class RoboEyeSenseApp:
 
     def _build_ui(self) -> None:
         """Construct all widgets and layout."""
+        self.root.columnconfigure(0, minsize=200)
         self.root.columnconfigure(1, weight=1)
+        self.root.columnconfigure(2, minsize=220)
         self.root.rowconfigure(0, weight=1)
+
+        # Minimum window size so that side panels are never hidden.
+        self.root.minsize(700, 400)
 
         # Left control panel
         ctrl_frame = ttk.Frame(self.root, padding=8, width=200)
@@ -723,19 +728,26 @@ class RoboEyeSenseApp:
         rgb = cv2.cvtColor(vis, cv2.COLOR_BGR2RGB)
         pil_img = Image.fromarray(rgb)
 
-        # Resize to fit the current canvas size
+        # Resize to fit the current canvas size while preserving aspect ratio
         canvas_w = self._canvas.winfo_width()
         canvas_h = self._canvas.winfo_height()
         if canvas_w > 1 and canvas_h > 1:
+            img_w, img_h = pil_img.size
+            scale = min(canvas_w / img_w, canvas_h / img_h)
+            new_w = max(1, int(img_w * scale))
+            new_h = max(1, int(img_h * scale))
             resample = getattr(Image, "Resampling", Image).BILINEAR
-            pil_img = pil_img.resize((canvas_w, canvas_h), resample)
+            pil_img = pil_img.resize((new_w, new_h), resample)
 
         self._tk_image = ImageTk.PhotoImage(image=pil_img)
+        cx = canvas_w // 2
+        cy = canvas_h // 2
         if self._canvas_image_id is None:
             self._canvas_image_id = self._canvas.create_image(
-                0, 0, anchor="nw", image=self._tk_image
+                cx, cy, anchor="center", image=self._tk_image
             )
         else:
+            self._canvas.coords(self._canvas_image_id, cx, cy)
             self._canvas.itemconfigure(self._canvas_image_id, image=self._tk_image)
 
         # Update info panels
