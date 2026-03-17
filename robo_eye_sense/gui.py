@@ -14,8 +14,8 @@ Layout
 |  [x] Laser  |                           | (list)    |
 |  ---------- |                           | --------- |
 |  Parameters |                           | Scenario  |
-|  Threshold  |                           | [Offset]  |
-|  Target area|                           | [SLAM  ]  |
+|  Threshold  |                           |[Offset]   |
+|  Target area|                           |  [SLAM]   |
 |  Sensitivity|                           |  (tabs)   |
 |  [ ] Overlay|                           |           |
 |  ---------- |                           |           |
@@ -1122,11 +1122,11 @@ class RoboEyeSenseApp:
         self._slam_markers_list.delete(0, tk.END)
         for m in mmap.markers():
             px, py, pz = m.position
-            mr, mp_val, my = m.orientation
+            mr, mp, my = m.orientation
             line = (
                 f"{m.marker_id:>4s} "
                 f"pos=({px:+.1f},{py:+.1f},{pz:+.1f}) "
-                f"ori=({mr:+.1f},{mp_val:+.1f},{my:+.1f})° "
+                f"ori=({mr:+.1f},{mp:+.1f},{my:+.1f})° "
                 f"n={m.observations}"
             )
             self._slam_markers_list.insert(tk.END, line)
