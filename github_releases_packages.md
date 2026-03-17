@@ -550,7 +550,7 @@ jobs:
 |---|---|---|
 | **Cel** | Publikowanie wersji projektu z opisem zmian | Hostowanie pakietów w rejestrach ekosystemów |
 | **Format** | Tagi Git + pliki binarne (assets) | Pakiety natywne (npm, Maven, Docker itp.) |
-| **Instalacja** | Ręczne pobranie pliku lub `gh release download` | Instalacja przez menadżer pakietów (`npm install`, `docker pull`) |
+| **Instalacja** | Ręczne pobranie pliku lub `gh release download` | Instalacja przez menedżer pakietów (`npm install`, `docker pull`) |
 | **Wersjonowanie** | Tagi Git (np. `v1.0.0`) | Wersje pakietów natywnych (np. `1.0.0`) |
 | **Integracja** | Każde repozytorium, każdy język | Wymaga konfiguracji klienta dla danego rejestru |
 | **Odbiorcy** | Użytkownicy końcowi, deweloperzy | Deweloperzy integrujący pakiet jako zależność |
@@ -581,7 +581,7 @@ oprogramowania:
 - **GitHub Packages** to w pełni funkcjonalny rejestr pakietów
   obsługujący wiele ekosystemów (npm, Maven, Docker i inne). Pozwala
   na dystrybucję bibliotek i modułów jako zależności do instalacji
-  przez menadżery pakietów.
+  przez menedżery pakietów.
 
 Oba mechanizmy można w pełni zautomatyzować za pomocą **GitHub Actions**,
 co pozwala na stworzenie niezawodnego pipeline'u CI/CD: od wypchnięcia
