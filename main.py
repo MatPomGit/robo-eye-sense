@@ -48,7 +48,7 @@ import cv2
 
 from robo_eye_sense import APP_NAME, RoboEyeDetector, __version__
 from robo_eye_sense.camera import Camera
-from robo_eye_sense.results import DetectionMode
+from robo_eye_sense.results import DetectionMode, DetectionType
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -159,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                 )
                 ref = scenario.capture_reference()
                 april_ref = [
-                    d for d in ref if d.detection_type.value == "april_tag"
+                    d for d in ref if d.detection_type == DetectionType.APRIL_TAG
                 ]
                 print(
                     f"Reference captured: {len(april_ref)} AprilTag(s) detected."
