@@ -534,8 +534,8 @@ def _solve_marker_pose(
     half = tag_size_cm / 2.0
     obj_pts = _np.array([
         [-half, -half, 0.0],
-        [ half, -half, 0.0],
-        [ half,  half, 0.0],
+        [half, -half, 0.0],
+        [half,  half, 0.0],
         [-half,  half, 0.0],
     ], dtype=_np.float64)
 
@@ -594,7 +594,7 @@ def _euler_to_rotation_matrix(
         [0, math.sin(r),  math.cos(r)],
     ])
     Ry = _np.array([
-        [ math.cos(p), 0, math.sin(p)],
+        [math.cos(p), 0, math.sin(p)],
         [0, 1, 0],
         [-math.sin(p), 0, math.cos(p)],
     ])

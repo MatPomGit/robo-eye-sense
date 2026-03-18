@@ -350,4 +350,3 @@ class CentroidTracker:
         # Register new tracks for unmatched detections
         for col in set(range(len(detections))) - used_cols:
             self._register_unlabeled(detections[col])
-

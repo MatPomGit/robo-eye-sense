@@ -38,7 +38,7 @@ from .tracker import CentroidTracker
 _COLOURS: Dict[DetectionType, Tuple[int, int, int]] = {
     DetectionType.APRIL_TAG: (0, 255, 0),    # green
     DetectionType.QR_CODE: (255, 128, 0),    # bluish
-    DetectionType.LASER_SPOT: (0, 255, 255), # yellow
+    DetectionType.LASER_SPOT: (0, 255, 255),  # yellow
 }
 
 # Mode indicator text rendered in the top-right corner of each annotated frame
@@ -60,8 +60,6 @@ _MODE_TRACKER_PARAMS: Dict[DetectionMode, Dict[str, int]] = {
 
 # Length of axis arrows drawn at the detection centre
 _AXIS_LENGTH = 40
-
-
 
 
 def _apriltags_available() -> bool:
