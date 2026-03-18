@@ -151,10 +151,16 @@ class RoboEyeDetector:
         for a description of each mode.
     laser_brightness_threshold:
         Pixel brightness threshold for laser-spot detection (0-255).
+    laser_brightness_threshold_max:
+        Upper pixel brightness threshold for laser-spot detection (0-255).
     laser_target_area:
         Target laser-spot area in pixels for laser detection.
     laser_sensitivity:
         Detection sensitivity (0-100) for laser-spot detection.
+    tag_names:
+        Optional mapping of AprilTag ID strings to human-readable names
+        (e.g. ``{"1": "box", "2": "table"}``).  When provided, the name
+        is appended to the detection's identifier.
     tracker_max_disappeared:
         Frames before a lost track is removed (used in NORMAL mode; the
         value is adjusted automatically in FAST and ROBUST modes).
@@ -170,14 +176,18 @@ class RoboEyeDetector:
         enable_laser: bool = False,
         mode: DetectionMode = DetectionMode.NORMAL,
         laser_brightness_threshold: int = 240,
+        laser_brightness_threshold_max: int = 255,
         laser_target_area: int = 100,
         laser_sensitivity: int = 50,
+        tag_names: Optional[Dict[str, str]] = None,
         tracker_max_disappeared: int = 10,
         tracker_max_distance: int = 50,
     ) -> None:
         self._april_detector: Optional[april_tag_detector.AprilTagDetector] = None
         self._qr_detector: Optional[QRCodeDetector] = None
         self._laser_detector: Optional[LaserSpotDetector] = None
+
+        self._tag_names: Dict[str, str] = dict(tag_names) if tag_names else {}
 
         # Store the user-supplied normal-mode tracker parameters so that the
         # mode setter can restore them when switching back to NORMAL.
@@ -201,6 +211,7 @@ class RoboEyeDetector:
         if enable_laser:
             self._laser_detector = LaserSpotDetector(
                 brightness_threshold=laser_brightness_threshold,
+                brightness_threshold_max=laser_brightness_threshold_max,
                 target_area=laser_target_area,
                 sensitivity=laser_sensitivity,
             )
@@ -272,6 +283,15 @@ class RoboEyeDetector:
         """The active :class:`LaserSpotDetector`, or ``None`` if disabled."""
         return self._laser_detector
 
+    @property
+    def tag_names(self) -> Dict[str, str]:
+        """Mapping of AprilTag ID strings to human-readable names."""
+        return self._tag_names
+
+    @tag_names.setter
+    def tag_names(self, value: Dict[str, str]) -> None:
+        self._tag_names = dict(value) if value else {}
+
     def enable_april(self) -> bool:
         """Enable the AprilTag detector.  Returns ``True`` on success."""
         if self._april_detector is not None:
@@ -297,6 +317,7 @@ class RoboEyeDetector:
     def enable_laser(
         self,
         brightness_threshold: int = 240,
+        brightness_threshold_max: int = 255,
         target_area: int = 100,
         sensitivity: int = 50,
     ) -> None:
@@ -304,6 +325,7 @@ class RoboEyeDetector:
         if self._laser_detector is None:
             self._laser_detector = LaserSpotDetector(
                 brightness_threshold=brightness_threshold,
+                brightness_threshold_max=brightness_threshold_max,
                 target_area=target_area,
                 sensitivity=sensitivity,
             )
@@ -371,7 +393,13 @@ class RoboEyeDetector:
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         if self._april_detector is not None:
-            detections.extend(self._april_detector.detect(gray))
+            april_detections = self._april_detector.detect(gray)
+            # Enrich AprilTag detections with human-readable names
+            if self._tag_names:
+                for d in april_detections:
+                    if d.identifier and d.identifier in self._tag_names:
+                        d.identifier = f"{d.identifier} ({self._tag_names[d.identifier]})"
+            detections.extend(april_detections)
         if self._qr_detector is not None:
             detections.extend(self._qr_detector.detect(frame))
         if self._laser_detector is not None:

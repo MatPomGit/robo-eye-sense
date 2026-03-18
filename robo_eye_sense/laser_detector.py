@@ -27,10 +27,15 @@ class LaserSpotDetector:
     Parameters
     ----------
     brightness_threshold:
-        Grayscale intensity threshold (0-255).  Pixels brighter than this
-        value are candidates.  Default ``240`` works well for a typical
+        Lower grayscale intensity threshold (0-255).  Pixels brighter than
+        this value are candidates.  Default ``240`` works well for a typical
         laser pointer; lower values detect dimmer spots at the risk of more
         false positives.
+    brightness_threshold_max:
+        Upper grayscale intensity threshold (0-255).  Pixels brighter than
+        this value are *excluded*.  Together with *brightness_threshold*
+        this defines a brightness window ``[brightness_threshold,
+        brightness_threshold_max]``.  Default ``255`` (no upper filtering).
     min_area:
         Hard minimum contour area in pixels.  Filters out single-pixel noise.
     max_area:
@@ -54,6 +59,7 @@ class LaserSpotDetector:
     def __init__(
         self,
         brightness_threshold: int = 240,
+        brightness_threshold_max: int = 255,
         min_area: int = 4,
         max_area: int = 1000,
         min_circularity: float = 0.2,
@@ -64,6 +70,15 @@ class LaserSpotDetector:
             raise ValueError(
                 f"brightness_threshold must be in [0, 255], got {brightness_threshold}"
             )
+        if not (0 <= brightness_threshold_max <= 255):
+            raise ValueError(
+                f"brightness_threshold_max must be in [0, 255], got {brightness_threshold_max}"
+            )
+        if brightness_threshold_max < brightness_threshold:
+            raise ValueError(
+                f"brightness_threshold_max ({brightness_threshold_max}) must be "
+                f">= brightness_threshold ({brightness_threshold})"
+            )
         if min_area < 0:
             raise ValueError(f"min_area must be >= 0, got {min_area}")
         if max_area <= min_area:
@@ -71,6 +86,7 @@ class LaserSpotDetector:
                 f"max_area ({max_area}) must be greater than min_area ({min_area})"
             )
         self.brightness_threshold = brightness_threshold
+        self.brightness_threshold_max = brightness_threshold_max
         self.min_area = min_area
         self.max_area = max_area
         self.min_circularity = min_circularity
@@ -129,10 +145,18 @@ class LaserSpotDetector:
         """
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        # Isolate very bright regions and store the raw mask for the GUI overlay
-        _, thresh = cv2.threshold(
-            gray, self.brightness_threshold, 255, cv2.THRESH_BINARY
-        )
+        # Isolate pixels within the brightness range and store the raw mask
+        # for the GUI overlay.
+        if self.brightness_threshold_max < 255:
+            thresh = cv2.inRange(
+                gray,
+                self.brightness_threshold,
+                self.brightness_threshold_max,
+            )
+        else:
+            _, thresh = cv2.threshold(
+                gray, self.brightness_threshold, 255, cv2.THRESH_BINARY
+            )
         self.last_threshold_mask = thresh.copy()
 
         # Morphological close to fill small holes inside a spot
