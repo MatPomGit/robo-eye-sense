@@ -626,21 +626,33 @@ class RoboEyeSenseApp:
         self._build_offset_tab(offset_tab)
         self._offset_tab = offset_tab
 
-        # ── SLAM tab ─────────────────────────────────────────────────────
-        slam_tab = ttk.Frame(self._scenario_notebook, padding=4)
-        self._scenario_notebook.add(slam_tab, text="SLAM")
-        self._build_slam_tab(slam_tab)
-        self._slam_tab = slam_tab
+    def _build_slam_tab(self, parent: ttk.Frame) -> None:
+        """Build the SLAM scenario tab contents."""
+        # Controls at the top
+        self._slam_start_btn = ttk.Button(
+            parent,
+            text="Start SLAM",
+            command=self._on_slam_start,
+        )
+        self._slam_start_btn.pack(fill="x", pady=(0, 2))
 
-        # ── Auto tab ─────────────────────────────────────────────────────
-        auto_tab = ttk.Frame(self._scenario_notebook, padding=4)
-        self._scenario_notebook.add(auto_tab, text="Auto")
-        self._build_auto_tab(auto_tab)
-        self._auto_tab = auto_tab
+        self._slam_reset_btn = ttk.Button(
+            parent,
+            text="Reset SLAM",
+            command=self._on_slam_reset,
+            state="disabled",
+        )
+        self._slam_reset_btn.pack(fill="x", pady=2)
 
-    # ──────────────────────────────────────────────────────────────────────
-    # Control callbacks
-    # ──────────────────────────────────────────────────────────────────────
+        self._slam_save_btn = ttk.Button(
+            parent,
+            text="Save map…",
+            command=self._on_slam_save,
+            state="disabled",
+        )
+        self._slam_save_btn.pack(fill="x", pady=2)
+
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
 
     def _build_offset_tab(self, parent: ttk.Frame) -> None:
         """Build the Offset scenario tab contents (capture/reset buttons + info text)."""
