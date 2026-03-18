@@ -205,6 +205,60 @@ class TestLaserSpotDetector:
             LaserSpotDetector(min_area=100, max_area=100)
 
     # ------------------------------------------------------------------
+    # brightness_threshold_max parameter
+    # ------------------------------------------------------------------
+
+    def test_default_threshold_max_is_255(self):
+        det = self._detector()
+        assert det.brightness_threshold_max == 255
+
+    def test_threshold_max_set_via_constructor(self):
+        det = self._detector(brightness_threshold_max=250)
+        assert det.brightness_threshold_max == 250
+
+    def test_threshold_max_invalid_too_high(self):
+        with pytest.raises(ValueError, match="brightness_threshold_max"):
+            LaserSpotDetector(brightness_threshold_max=256)
+
+    def test_threshold_max_invalid_negative(self):
+        with pytest.raises(ValueError, match="brightness_threshold_max"):
+            LaserSpotDetector(brightness_threshold_max=-1)
+
+    def test_threshold_max_less_than_min_raises(self):
+        with pytest.raises(ValueError, match="brightness_threshold_max"):
+            LaserSpotDetector(brightness_threshold=200, brightness_threshold_max=100)
+
+    def test_threshold_max_filters_too_bright(self):
+        """A fully white spot (255) should be filtered when max < 255."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        cv2.circle(frame, (100, 100), 6, (255, 255, 255), -1)
+        # threshold_min=200, threshold_max=240 → 255 is out of range
+        det = self._detector(brightness_threshold=200, brightness_threshold_max=240)
+        results = det.detect(frame)
+        assert results == []
+
+    def test_threshold_max_255_same_as_default(self, bright_spot_frame):
+        """With max=255, detection should work like the default."""
+        det_default = self._detector()
+        det_max = self._detector(brightness_threshold_max=255)
+        r_default = det_default.detect(bright_spot_frame)
+        r_max = det_max.detect(bright_spot_frame)
+        assert len(r_default) == len(r_max)
+
+    def test_threshold_max_equal_to_min(self):
+        """threshold_max == threshold_min should be valid (single value)."""
+        det = self._detector(brightness_threshold=240, brightness_threshold_max=240)
+        assert det.brightness_threshold_max == 240
+
+    def test_threshold_max_can_be_changed_at_runtime(self, bright_spot_frame):
+        """brightness_threshold_max can be changed after construction."""
+        det = self._detector(brightness_threshold=200, brightness_threshold_max=255)
+        assert len(det.detect(bright_spot_frame)) == 1
+        # Narrow the range to exclude the bright spot
+        det.brightness_threshold_max = 230
+        assert det.detect(bright_spot_frame) == []
+
+    # ------------------------------------------------------------------
     # Extracted helper methods
     # ------------------------------------------------------------------
 

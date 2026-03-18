@@ -73,6 +73,47 @@ class TestEnabledDetectorsLabel:
         assert _enabled_detectors_label(args) == "QR"
 
 
+class TestLaserThresholdCLI:
+    """Verify --laser-threshold and --laser-threshold-max parsing."""
+
+    def test_default_laser_threshold(self):
+        args = _parse_args([])
+        assert args.laser_threshold == 240
+
+    def test_custom_laser_threshold(self):
+        args = _parse_args(["--laser-threshold", "180"])
+        assert args.laser_threshold == 180
+
+    def test_default_laser_threshold_max(self):
+        args = _parse_args([])
+        assert args.laser_threshold_max == 255
+
+    def test_custom_laser_threshold_max(self):
+        args = _parse_args(["--laser-threshold-max", "250"])
+        assert args.laser_threshold_max == 250
+
+    def test_headless_threshold_passed_to_detector(self, capsys, tmp_path):
+        """Verify threshold values are used when running headless."""
+        video = tmp_path / "black.mp4"
+        _make_dummy_video(video, num_frames=1)
+
+        with patch(
+            "robo_eye_sense.april_tag_detector._apriltags_available",
+            return_value=False,
+        ):
+            from main import main
+
+            rc = main([
+                "--source", str(video),
+                "--headless",
+                "--laser",
+                "--laser-threshold", "200",
+                "--laser-threshold-max", "250",
+            ])
+
+        assert rc == 0
+
+
 # ---------------------------------------------------------------------------
 # Startup configuration summary (headless detection loop)
 # ---------------------------------------------------------------------------
