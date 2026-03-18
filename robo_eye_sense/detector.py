@@ -155,6 +155,12 @@ class RoboEyeDetector:
         Target laser-spot area in pixels for laser detection.
     laser_sensitivity:
         Detection sensitivity (0-100) for laser-spot detection.
+    laser_channels:
+        Colour channels to analyse for laser-spot detection.  A string
+        containing any combination of ``'r'``, ``'g'``, ``'b'`` (default
+        ``"rgb"`` – all channels).  Selecting fewer channels can improve
+        detection of a specific-colour laser (e.g. ``"r"`` for a red
+        laser pointer).
     tracker_max_disappeared:
         Frames before a lost track is removed (used in NORMAL mode; the
         value is adjusted automatically in FAST and ROBUST modes).
@@ -172,6 +178,7 @@ class RoboEyeDetector:
         laser_brightness_threshold: int = 240,
         laser_target_area: int = 100,
         laser_sensitivity: int = 50,
+        laser_channels: str = "rgb",
         tracker_max_disappeared: int = 10,
         tracker_max_distance: int = 50,
     ) -> None:
@@ -203,6 +210,7 @@ class RoboEyeDetector:
                 brightness_threshold=laser_brightness_threshold,
                 target_area=laser_target_area,
                 sensitivity=laser_sensitivity,
+                channels=laser_channels,
             )
 
         # Create tracker with parameters appropriate for the requested mode.
@@ -299,6 +307,7 @@ class RoboEyeDetector:
         brightness_threshold: int = 240,
         target_area: int = 100,
         sensitivity: int = 50,
+        channels: str = "rgb",
     ) -> None:
         """Enable the laser-spot detector with the given parameters."""
         if self._laser_detector is None:
@@ -306,6 +315,7 @@ class RoboEyeDetector:
                 brightness_threshold=brightness_threshold,
                 target_area=target_area,
                 sensitivity=sensitivity,
+                channels=channels,
             )
 
     def disable_laser(self) -> None:

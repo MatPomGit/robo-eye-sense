@@ -233,3 +233,89 @@ class TestLaserSpotDetector:
         det = self._detector(sensitivity=100, min_circularity=0.2)
         circ = det._compute_effective_circularity()
         assert abs(circ - 0.2) < 0.01
+
+    # ------------------------------------------------------------------
+    # channels parameter
+    # ------------------------------------------------------------------
+
+    def test_default_channels_is_bgr(self):
+        """Default channels value should normalise to 'bgr'."""
+        det = self._detector()
+        assert det.channels == "bgr"
+
+    def test_channels_single_red(self):
+        """channels='r' should be accepted and stored."""
+        det = self._detector(channels="r")
+        assert det.channels == "r"
+
+    def test_channels_two(self):
+        """channels='rg' should normalise to 'gr'."""
+        det = self._detector(channels="rg")
+        assert det.channels == "gr"
+
+    def test_channels_setter_normalises(self):
+        """Setting channels at runtime should normalise and validate."""
+        det = self._detector()
+        det.channels = "BR"
+        assert det.channels == "br"
+
+    def test_channels_invalid_raises(self):
+        """Invalid channel letter should raise ValueError."""
+        with pytest.raises(ValueError, match="channels"):
+            LaserSpotDetector(channels="x")
+
+    def test_channels_empty_raises(self):
+        """Empty channels string should raise ValueError."""
+        with pytest.raises(ValueError, match="channels"):
+            LaserSpotDetector(channels="")
+
+    def test_detect_red_channel_only(self):
+        """A pure-red spot should be detected when channels='r'."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        # BGR: red = (0, 0, 255)
+        cv2.circle(frame, (100, 100), 6, (0, 0, 255), -1)
+        det = self._detector(channels="r")
+        results = det.detect(frame)
+        assert len(results) == 1
+
+    def test_detect_red_channel_ignores_blue_spot(self):
+        """A pure-blue spot should NOT be detected when channels='r'."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        # BGR: blue = (255, 0, 0)
+        cv2.circle(frame, (100, 100), 6, (255, 0, 0), -1)
+        det = self._detector(channels="r")
+        results = det.detect(frame)
+        assert results == []
+
+    def test_detect_blue_channel_finds_blue_spot(self):
+        """A pure-blue spot should be detected when channels='b'."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        cv2.circle(frame, (100, 100), 6, (255, 0, 0), -1)
+        det = self._detector(channels="b")
+        results = det.detect(frame)
+        assert len(results) == 1
+
+    def test_detect_green_channel_finds_green_spot(self):
+        """A pure-green spot should be detected when channels='g'."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        cv2.circle(frame, (100, 100), 6, (0, 255, 0), -1)
+        det = self._detector(channels="g")
+        results = det.detect(frame)
+        assert len(results) == 1
+
+    def test_detect_two_channels_rg(self):
+        """A red+green spot should be detected when channels='rg'."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        # Yellow-ish (R+G bright, B zero) → BGR (0, 255, 255)
+        cv2.circle(frame, (100, 100), 6, (0, 255, 255), -1)
+        det = self._detector(channels="rg")
+        results = det.detect(frame)
+        assert len(results) == 1
+
+    def test_all_channels_detects_white_spot(self):
+        """Default (all channels) should detect a white spot."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        cv2.circle(frame, (100, 100), 6, (255, 255, 255), -1)
+        det = self._detector()
+        results = det.detect(frame)
+        assert len(results) == 1

@@ -254,9 +254,13 @@ class RoboEyeSenseApp:
         _init_threshold = _laser.brightness_threshold if _laser is not None else 240
         _init_target_area = _laser.target_area if _laser is not None else 100
         _init_sensitivity = _laser.sensitivity if _laser is not None else 50
+        _init_channels = _laser.channels if _laser is not None else "bgr"
         self._laser_threshold = tk.IntVar(value=_init_threshold)
         self._laser_target_area = tk.IntVar(value=_init_target_area)
         self._laser_sensitivity = tk.IntVar(value=_init_sensitivity)
+        self._laser_ch_r = tk.BooleanVar(value="r" in _init_channels)
+        self._laser_ch_g = tk.BooleanVar(value="g" in _init_channels)
+        self._laser_ch_b = tk.BooleanVar(value="b" in _init_channels)
         self._show_threshold_overlay = tk.BooleanVar(value=False)
 
         # Scenario state
@@ -445,6 +449,25 @@ class RoboEyeSenseApp:
             variable=self._laser_sensitivity,
             command=self._on_sensitivity_change,
         ).pack(fill="x")
+
+        # Laser channel selection
+        ttk.Label(parent, text="Laser channels").pack(
+            anchor="w", pady=(8, 0)
+        )
+        _ch_frame = ttk.Frame(parent)
+        _ch_frame.pack(anchor="w")
+        ttk.Checkbutton(
+            _ch_frame, text="R", variable=self._laser_ch_r,
+            command=self._on_channel_change,
+        ).pack(side="left")
+        ttk.Checkbutton(
+            _ch_frame, text="G", variable=self._laser_ch_g,
+            command=self._on_channel_change,
+        ).pack(side="left")
+        ttk.Checkbutton(
+            _ch_frame, text="B", variable=self._laser_ch_b,
+            command=self._on_channel_change,
+        ).pack(side="left")
 
         # Threshold overlay toggle
         ttk.Checkbutton(
@@ -707,9 +730,27 @@ class RoboEyeSenseApp:
                 brightness_threshold=self._laser_threshold.get(),
                 target_area=self._laser_target_area.get(),
                 sensitivity=self._laser_sensitivity.get(),
+                channels=self._laser_channels_str(),
             )
         else:
             self.detector.disable_laser()
+
+    def _laser_channels_str(self) -> str:
+        """Build a channel string from the R/G/B checkbox state."""
+        chs = ""
+        if self._laser_ch_r.get():
+            chs += "r"
+        if self._laser_ch_g.get():
+            chs += "g"
+        if self._laser_ch_b.get():
+            chs += "b"
+        return chs or "rgb"  # fall back to all channels if none selected
+
+    def _on_channel_change(self) -> None:
+        """Apply the new laser channel selection."""
+        laser = self.detector.laser_detector
+        if laser is not None:
+            laser.channels = self._laser_channels_str()
 
     def _on_threshold_change(self, _value: Optional[str] = None) -> None:
         """Apply the new laser-threshold value."""
