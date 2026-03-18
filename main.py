@@ -103,12 +103,6 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Upper brightness threshold for laser-spot detection (0–255).",
     )
     parser.add_argument(
-        "--laser-threshold-max",
-        type=int,
-        default=255,
-        help="Upper brightness threshold for laser-spot detection (0–255).",
-    )
-    parser.add_argument(
         "--laser-channels",
         default="rgb",
         help=(
@@ -176,6 +170,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=(
             "In 'auto' scenario mode, the ID of the AprilTag marker to "
             "follow.  When omitted the first visible marker is used."
+        ),
+    )
+    parser.add_argument(
         "--info",
         action="store_true",
         help=(
@@ -260,7 +257,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         enable_qr=args.qr,
         enable_laser=args.laser,
         mode=mode,
-        laser_brightness_threshold_min=args.laser_threshold_min,
+        laser_brightness_threshold=args.laser_threshold,
         laser_brightness_threshold_max=args.laser_threshold_max,
         tag_names=tag_names,
         laser_channels=args.laser_channels,

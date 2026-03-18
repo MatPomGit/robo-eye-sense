@@ -175,7 +175,7 @@ class RoboEyeDetector:
         enable_qr: bool = False,
         enable_laser: bool = False,
         mode: DetectionMode = DetectionMode.NORMAL,
-        laser_brightness_threshold_min: int = 240,
+        laser_brightness_threshold: int = 240,
         laser_brightness_threshold_max: int = 255,
         laser_target_area: int = 100,
         laser_sensitivity: int = 50,

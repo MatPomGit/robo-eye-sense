@@ -82,7 +82,6 @@ class LaserSpotDetector:
         target_area: int = 100,
         sensitivity: int = 50,
         channels: str = "rgb",
-        brightness_threshold_max: int = 255,
     ) -> None:
         if not (0 <= brightness_threshold <= 255):
             raise ValueError(
