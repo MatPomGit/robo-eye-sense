@@ -53,6 +53,7 @@ Press **q** to quit the OpenCV display window (non-GUI, non-headless mode).
 from __future__ import annotations
 
 import argparse
+import io
 import sys
 import time
 
@@ -343,47 +344,57 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                     )
                     import select
 
-                    while True:
-                        # Non-blocking check for stdin availability;
-                        # fall through immediately when stdin is not a
-                        # terminal (e.g. piped / EOF).
-                        ready, _, _ = select.select([sys.stdin], [], [], 0.1)
-                        if not ready:
-                            # No input available and stdin is still open –
-                            # exit if there is nothing more to read
-                            # (non-interactive pipe).
-                            if sys.stdin.closed or not sys.stdin.isatty():
+                    try:
+                        while True:
+                            # Non-blocking check for stdin availability;
+                            # fall through immediately when stdin is not a
+                            # terminal (e.g. piped / EOF).
+                            try:
+                                ready, _, _ = select.select(
+                                    [sys.stdin], [], [], 0.1
+                                )
+                            except (ValueError, OSError):
+                                # stdin doesn't support fileno() (e.g. in
+                                # test harness or when stdin is closed).
                                 break
-                            continue
-                        try:
-                            line = sys.stdin.readline()
-                        except EOFError:
-                            break
-                        if not line:
-                            break
-                        cmd = line.strip().lower()
-                        if cmd in ("quit", "q", "exit"):
-                            break
-                        elif cmd == "ref":
-                            print("Capturing new reference frame...")
-                            ref = scenario.capture_reference()
-                            april_ref = [
-                                d
-                                for d in ref
-                                if d.detection_type == DetectionType.APRIL_TAG
-                            ]
-                            print(
-                                f"New reference captured: "
-                                f"{len(april_ref)} AprilTag(s) detected."
-                            )
-                        elif cmd == "offset":
-                            print("Computing offset...")
-                            result = scenario.compute_current_offset()
-                            dx, dy = result.offset
-                            print(f"Matched: {result.matched_tags}  "
-                                  f"Offset: ({dx:+.1f}, {dy:+.1f}) px")
-                        elif cmd:
-                            print(f"Unknown command: {cmd!r}")
+                            if not ready:
+                                # No input available and stdin is still open –
+                                # exit if there is nothing more to read
+                                # (non-interactive pipe).
+                                if sys.stdin.closed or not sys.stdin.isatty():
+                                    break
+                                continue
+                            try:
+                                line = sys.stdin.readline()
+                            except EOFError:
+                                break
+                            if not line:
+                                break
+                            cmd = line.strip().lower()
+                            if cmd in ("quit", "q", "exit"):
+                                break
+                            elif cmd == "ref":
+                                print("Capturing new reference frame...")
+                                ref = scenario.capture_reference()
+                                april_ref = [
+                                    d
+                                    for d in ref
+                                    if d.detection_type == DetectionType.APRIL_TAG
+                                ]
+                                print(
+                                    f"New reference captured: "
+                                    f"{len(april_ref)} AprilTag(s) detected."
+                                )
+                            elif cmd == "offset":
+                                print("Computing offset...")
+                                result = scenario.compute_current_offset()
+                                dx, dy = result.offset
+                                print(f"Matched: {result.matched_tags}  "
+                                      f"Offset: ({dx:+.1f}, {dy:+.1f}) px")
+                            elif cmd:
+                                print(f"Unknown command: {cmd!r}")
+                    except io.UnsupportedOperation:
+                        pass
 
                     print("Offset scenario finished.")
                 else:
