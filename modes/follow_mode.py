@@ -189,15 +189,17 @@ class FollowMode(BaseMode):
         headless = context.get("headless", False)
         if headless:
             frame_idx = context.get("frame_idx", 0)
+            target_str = f"{result.mode_label}"
+            if result.target_id:
+                target_str += f"({result.target_id})"
             print(
                 f"[frame {frame_idx}] "
                 f"mode: follow  "
-                f"target: {result.mode_label}"
-                + (f"({result.target_id})" if result.target_id else "")
-                + f"  error_x: {result.error_x:+.1f}"
-                  f"  error_z: {result.error_z:+.3f}"
-                  f"  linear: {result.linear:+.3f}"
-                  f"  angular: {result.angular:+.4f}"
+                f"target: {target_str}  "
+                f"error_x: {result.error_x:+.1f}  "
+                f"error_z: {result.error_z:+.3f}  "
+                f"linear: {result.linear:+.3f}  "
+                f"angular: {result.angular:+.4f}"
             )
 
         return vis
