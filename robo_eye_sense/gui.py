@@ -1,34 +1,33 @@
 """Tkinter-based GUI application for RoboEyeSense.
 
-Layout
-------
-+-------------+---------------------------+-----------+
-|  CONTROLS   |       VIDEO FEED          |   INFO    |
-|  ---------- |  (annotated frame)        | --------- |
-|  Mode       |                           | Camera    |
-|  [combo]    |                           | FPS / W×H |
-|  ---------- |                           | --------- |
-|  Detectors  |                           | Mode      |
-|  [x] April  |                           | --------- |
-|  [x] QR     |                           | Objects   |
-|  [x] Laser  |                           | (list)    |
-|  ---------- |                           | --------- |
-|  Parameters |                           | Scenario  |
-|  Threshold  |                           |[Offset]   |
-|  Target area|                           |  [SLAM]   |
-|  Sensitivity|                           |  (tabs)   |
-|  [ ] Overlay|                           |           |
-|  ---------- |                           |           |
-|  Scenario   |                           |           |
-|  [Start]    |                           |           |
-|  [Capture ] |                           |           |
-|  [Reset   ] |                           |           |
-|  ---------- |                           |           |
-|  [  Quit  ] |                           |           |
-+-------------+---------------------------+-----------+
-|  Status bar (FPS | Mode | Detections)               |
-+------------------------------------------------------|
+Layout (normal mode)
+---------------------
++-------------+---------------------------+------------------+
+|  CONTROLS   |       VIDEO FEED          | INFO/CAM/MODE    |
+|  ---------- |  (annotated frame)        | ---------------- |
+|  Mode       |                           | App / FPS / Res  |
+|  [combo]    |                           | Mode label       |
+|  ---------- |                           | ---------------- |
+|  Detectors  |                           | Detected objects |
+|  [x] April  |                           | (list)           |
+|  [x] QR     |                           | ---------------- |
+|  [x] Laser  |                           | Scenario         |
+|  ---------- |                           | [Offset][SLAM]   |
+|  Parameters |                           | [Auto]  (tabs)   |
+|  Threshold  |                           | (buttons+info    |
+|  Target area|                           |  all in tabs)    |
+|  Sensitivity|                           |                  |
+|  [ ] Overlay|                           |                  |
+|  ---------- |                           |                  |
+|  Recording  |                           |                  |
+|  ---------- |                           |                  |
+|[Toggle View]|                           |                  |
+|  [  Quit  ] |                           |                  |
++-------------+---------------------------+------------------+
+|  Status bar (FPS | Mode | Detections)                      |
++------------------------------------------------------------+
 
+Compact layout: camera column is fixed-width; info panel expands.
 Keyboard shortcuts: Ctrl+1 → Normal, Ctrl+2 → Fast, Ctrl+3 → Robust.
 
 Usage::
@@ -71,12 +70,15 @@ from .results import Detection, DetectionMode, DetectionType
 _UPDATE_INTERVAL_MS = 16  # ~60 Hz ceiling; actual rate is camera-limited
 
 # 3-D visualisation defaults
-_VIS3D_WIDTH = 200
-_VIS3D_HEIGHT = 200
+_VIS3D_WIDTH = 320
+_VIS3D_HEIGHT = 320
 _VIS3D_BG = "#1a1a2e"
 _VIS3D_GRID_COLOR = "#334455"
 _VIS3D_MARKER_COLOR = "#00cc66"
 _VIS3D_CAMERA_COLOR = "#ff4444"
+
+# Fixed camera-column width used in compact layout mode
+_COMPACT_CAMERA_WIDTH = _VIS3D_WIDTH
 
 # Human-readable labels shown in the mode combobox
 _MODE_DISPLAY: dict[str, DetectionMode] = {
@@ -230,7 +232,7 @@ class RoboEyeSenseApp:
         self.camera = camera
         self.detector = detector
 
-        self.root.title(f"{APP_NAME} v{__version__}")
+        self.root.title("robot-vision")
         self.root.resizable(True, True)
 
         # ── State variables ──────────────────────────────────────────────
@@ -285,6 +287,9 @@ class RoboEyeSenseApp:
         self._recorder: Optional[VideoRecorder] = None
         self._record_path: Optional[str] = initial_record_path
 
+        # Layout state
+        self._compact_view = False
+
         # Build the UI
         self._build_ui()
 
@@ -304,11 +309,11 @@ class RoboEyeSenseApp:
         """Construct all widgets and layout."""
         self.root.columnconfigure(0, minsize=200)
         self.root.columnconfigure(1, weight=1)
-        self.root.columnconfigure(2, minsize=220)
+        self.root.columnconfigure(2, minsize=280)
         self.root.rowconfigure(0, weight=1)
 
         # Minimum window size so that side panels are never hidden.
-        self.root.minsize(700, 400)
+        self.root.minsize(780, 480)
 
         # Left control panel
         ctrl_frame = ttk.Frame(self.root, padding=8, width=200)
@@ -501,86 +506,6 @@ class RoboEyeSenseApp:
             variable=self._show_threshold_overlay,
         ).pack(anchor="w", pady=(8, 0))
 
-        # ── Scenario ─────────────────────────────────────────────────────
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=8)
-        ttk.Label(parent, text="Offset Scenario", font=("", 9, "bold")).pack(anchor="w")
-
-        self._scenario_start_btn = ttk.Button(
-            parent,
-            text="Start scenario",
-            command=self._on_scenario_start,
-        )
-        self._scenario_start_btn.pack(fill="x", pady=(4, 2))
-
-        self._scenario_capture_btn = ttk.Button(
-            parent,
-            text="Capture reference",
-            command=self._on_scenario_capture_reference,
-            state="disabled",
-        )
-        self._scenario_capture_btn.pack(fill="x", pady=2)
-
-        self._scenario_reset_btn = ttk.Button(
-            parent,
-            text="Reset reference",
-            command=self._on_scenario_reset,
-            state="disabled",
-        )
-        self._scenario_reset_btn.pack(fill="x", pady=2)
-
-        # ── SLAM scenario ─────────────────────────────────────────────────
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=8)
-        ttk.Label(parent, text="SLAM Scenario", font=("", 9, "bold")).pack(anchor="w")
-
-        self._slam_start_btn = ttk.Button(
-            parent,
-            text="Start SLAM",
-            command=self._on_slam_start,
-        )
-        self._slam_start_btn.pack(fill="x", pady=(4, 2))
-
-        self._slam_reset_btn = ttk.Button(
-            parent,
-            text="Reset SLAM",
-            command=self._on_slam_reset,
-            state="disabled",
-        )
-        self._slam_reset_btn.pack(fill="x", pady=2)
-
-        self._slam_save_btn = ttk.Button(
-            parent,
-            text="Save map…",
-            command=self._on_slam_save,
-            state="disabled",
-        )
-        self._slam_save_btn.pack(fill="x", pady=2)
-
-        # ── Auto-follow scenario ──────────────────────────────────────────
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=8)
-        ttk.Label(parent, text="Auto Follow", font=("", 9, "bold")).pack(anchor="w")
-
-        self._auto_start_btn = ttk.Button(
-            parent,
-            text="Start auto",
-            command=self._on_auto_start,
-        )
-        self._auto_start_btn.pack(fill="x", pady=(4, 2))
-
-        # Marker-ID selector
-        _marker_frame = ttk.Frame(parent)
-        _marker_frame.pack(fill="x", pady=2)
-        ttk.Label(_marker_frame, text="Follow ID:").pack(side="left")
-        self._auto_marker_var = tk.StringVar(value="")
-        self._auto_marker_entry = ttk.Entry(
-            _marker_frame,
-            textvariable=self._auto_marker_var,
-            width=6,
-        )
-        self._auto_marker_entry.pack(side="left", padx=(4, 0))
-        self._auto_marker_entry.bind(
-            "<Return>", self._on_auto_marker_id_change,
-        )
-
         # ── Recording ─────────────────────────────────────────────────────
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=8)
         ttk.Label(parent, text="Recording", font=("", 9, "bold")).pack(anchor="w")
@@ -599,38 +524,47 @@ class RoboEyeSenseApp:
             font=("", 8, "italic"),
         ).pack(anchor="w")
 
+        # ── Layout toggle ─────────────────────────────────────────────────
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=8)
+        self._layout_btn_var = tk.StringVar(value="Compact view")
+        self._layout_btn = ttk.Button(
+            parent,
+            textvariable=self._layout_btn_var,
+            command=self._toggle_layout,
+        )
+        self._layout_btn.pack(fill="x", pady=(0, 4))
+
         # ── Quit button ───────────────────────────────────────────────────
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=12)
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
         ttk.Button(parent, text="Quit", command=self._on_close).pack(fill="x")
 
     def _build_info_panel(self, parent: ttk.Frame) -> None:
         """Build the right-side information panel."""
-        ttk.Label(parent, text="INFO", font=("", 10, "bold")).pack(
-            anchor="w", pady=(0, 6)
+        ttk.Label(parent, text="INFO / CAMERA / MODE", font=("", 10, "bold")).pack(
+            anchor="w", pady=(0, 4)
         )
 
-        # Software name and version
+        # Software name, version, camera parameters and mode — merged section
         ttk.Label(
             parent,
             text=f"{APP_NAME} v{__version__}",
             font=("", 9, "italic"),
         ).pack(anchor="w")
 
-        # Camera parameters
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
-        ttk.Label(parent, text="Camera", font=("", 9, "bold")).pack(anchor="w")
-
         self._cam_fps_var = tk.StringVar(value="FPS: –")
         self._cam_res_var = tk.StringVar(value="Resolution: –")
         ttk.Label(parent, textvariable=self._cam_fps_var).pack(anchor="w")
         ttk.Label(parent, textvariable=self._cam_res_var).pack(anchor="w")
 
-        # Current mode
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
-        ttk.Label(parent, text="Mode", font=("", 9, "bold")).pack(anchor="w")
         initial_label = _MODE_DISPLAY_INV.get(self.detector.mode, "Normal")
         self._info_mode_var = tk.StringVar(value=initial_label)
-        ttk.Label(parent, textvariable=self._info_mode_var).pack(anchor="w")
+        self._info_mode_label = ttk.Label(
+            parent,
+            textvariable=self._info_mode_var,
+            font=("", 9, "bold"),
+            foreground="#336699",
+        )
+        self._info_mode_label.pack(anchor="w")
 
         # Detected objects list
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=8)
@@ -664,23 +598,8 @@ class RoboEyeSenseApp:
         # ── Offset tab ────────────────────────────────────────────────────
         offset_tab = ttk.Frame(self._scenario_notebook, padding=4)
         self._scenario_notebook.add(offset_tab, text="Offset")
-
-        scenario_frame = ttk.Frame(offset_tab)
-        scenario_frame.pack(fill="both", expand=True)
-        scenario_scroll = ttk.Scrollbar(scenario_frame, orient="vertical")
-        self._scenario_text = tk.Text(
-            scenario_frame,
-            yscrollcommand=scenario_scroll.set,
-            font=("Courier", 8),
-            wrap="word",
-            height=10,
-            state="disabled",
-            bg="#f0f0f0",
-        )
-        scenario_scroll.config(command=self._scenario_text.yview)
-        self._scenario_text.pack(side="left", fill="both", expand=True)
-        scenario_scroll.pack(side="right", fill="y")
-        self._set_scenario_text("Scenario not started.\nClick 'Start scenario' to begin.")
+        self._build_offset_tab(offset_tab)
+        self._offset_tab = offset_tab
 
         # ── SLAM tab ─────────────────────────────────────────────────────
         slam_tab = ttk.Frame(self._scenario_notebook, padding=4)
@@ -698,8 +617,80 @@ class RoboEyeSenseApp:
     # Control callbacks
     # ──────────────────────────────────────────────────────────────────────
 
+    def _build_offset_tab(self, parent: ttk.Frame) -> None:
+        """Build the Offset scenario tab contents (buttons + info text)."""
+        # Controls
+        self._scenario_start_btn = ttk.Button(
+            parent,
+            text="Start scenario",
+            command=self._on_scenario_start,
+        )
+        self._scenario_start_btn.pack(fill="x", pady=(0, 2))
+
+        self._scenario_capture_btn = ttk.Button(
+            parent,
+            text="Capture reference",
+            command=self._on_scenario_capture_reference,
+            state="disabled",
+        )
+        self._scenario_capture_btn.pack(fill="x", pady=2)
+
+        self._scenario_reset_btn = ttk.Button(
+            parent,
+            text="Reset reference",
+            command=self._on_scenario_reset,
+            state="disabled",
+        )
+        self._scenario_reset_btn.pack(fill="x", pady=2)
+
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
+
+        # Info text area
+        scenario_frame = ttk.Frame(parent)
+        scenario_frame.pack(fill="both", expand=True)
+        scenario_scroll = ttk.Scrollbar(scenario_frame, orient="vertical")
+        self._scenario_text = tk.Text(
+            scenario_frame,
+            yscrollcommand=scenario_scroll.set,
+            font=("Courier", 8),
+            wrap="word",
+            height=10,
+            state="disabled",
+            bg="#f0f0f0",
+        )
+        scenario_scroll.config(command=self._scenario_text.yview)
+        self._scenario_text.pack(side="left", fill="both", expand=True)
+        scenario_scroll.pack(side="right", fill="y")
+        self._set_scenario_text("Scenario not started.\nClick 'Start scenario' to begin.")
+
     def _build_slam_tab(self, parent: ttk.Frame) -> None:
         """Build the SLAM scenario tab contents."""
+        # Controls at the top
+        self._slam_start_btn = ttk.Button(
+            parent,
+            text="Start SLAM",
+            command=self._on_slam_start,
+        )
+        self._slam_start_btn.pack(fill="x", pady=(0, 2))
+
+        self._slam_reset_btn = ttk.Button(
+            parent,
+            text="Reset SLAM",
+            command=self._on_slam_reset,
+            state="disabled",
+        )
+        self._slam_reset_btn.pack(fill="x", pady=2)
+
+        self._slam_save_btn = ttk.Button(
+            parent,
+            text="Save map…",
+            command=self._on_slam_save,
+            state="disabled",
+        )
+        self._slam_save_btn.pack(fill="x", pady=2)
+
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
+
         # Robot pose section
         ttk.Label(parent, text="Robot pose", font=("", 9, "bold")).pack(
             anchor="w"
@@ -711,7 +702,7 @@ class RoboEyeSenseApp:
             parent,
             textvariable=self._slam_robot_var,
             font=("Courier", 8),
-            wraplength=200,
+            wraplength=260,
             justify="left",
         ).pack(anchor="w", pady=(0, 4))
 
@@ -752,6 +743,31 @@ class RoboEyeSenseApp:
 
     def _build_auto_tab(self, parent: ttk.Frame) -> None:
         """Build the Auto-follow scenario tab contents."""
+        # Controls at the top
+        self._auto_start_btn = ttk.Button(
+            parent,
+            text="Start auto",
+            command=self._on_auto_start,
+        )
+        self._auto_start_btn.pack(fill="x", pady=(0, 2))
+
+        # Marker-ID selector
+        _marker_frame = ttk.Frame(parent)
+        _marker_frame.pack(fill="x", pady=2)
+        ttk.Label(_marker_frame, text="Follow ID:").pack(side="left")
+        self._auto_marker_var = tk.StringVar(value="")
+        self._auto_marker_entry = ttk.Entry(
+            _marker_frame,
+            textvariable=self._auto_marker_var,
+            width=6,
+        )
+        self._auto_marker_entry.pack(side="left", padx=(4, 0))
+        self._auto_marker_entry.bind(
+            "<Return>", self._on_auto_marker_id_change,
+        )
+
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
+
         ttk.Label(parent, text="Follow vector", font=("", 9, "bold")).pack(
             anchor="w"
         )
@@ -762,7 +778,7 @@ class RoboEyeSenseApp:
             parent,
             textvariable=self._auto_info_var,
             font=("Courier", 8),
-            wraplength=200,
+            wraplength=260,
             justify="left",
         ).pack(anchor="w", pady=(0, 4))
 
@@ -784,6 +800,7 @@ class RoboEyeSenseApp:
         auto_scroll.config(command=self._auto_markers_list.yview)
         self._auto_markers_list.pack(side="left", fill="both", expand=True)
         auto_scroll.pack(side="right", fill="y")
+
 
     def _set_mode(self, mode: DetectionMode) -> None:
         """Programmatically switch to *mode* and update all UI elements."""
@@ -1356,6 +1373,29 @@ class RoboEyeSenseApp:
                 tk.END,
                 f"{prefix}{mid:>4s}  pos=({pos[0]},{pos[1]})",
             )
+
+    # ──────────────────────────────────────────────────────────────────────
+    # Layout management
+    # ──────────────────────────────────────────────────────────────────────
+
+    def _toggle_layout(self) -> None:
+        """Toggle between normal and compact-camera layouts.
+
+        Normal layout: camera column expands, info panel has fixed width.
+        Compact layout: camera column is fixed at *_COMPACT_CAMERA_WIDTH* px,
+        info panel expands to use the remaining space.
+        """
+        self._compact_view = not self._compact_view
+        if self._compact_view:
+            # Compact: camera fixed; info panel expands
+            self.root.columnconfigure(1, minsize=_COMPACT_CAMERA_WIDTH, weight=0)
+            self.root.columnconfigure(2, minsize=280, weight=1)
+            self._layout_btn_var.set("Normal view")
+        else:
+            # Normal: camera expands; info panel has a fixed minimum
+            self.root.columnconfigure(1, minsize=0, weight=1)
+            self.root.columnconfigure(2, minsize=280, weight=0)
+            self._layout_btn_var.set("Compact view")
 
     # ──────────────────────────────────────────────────────────────────────
     # Lifecycle

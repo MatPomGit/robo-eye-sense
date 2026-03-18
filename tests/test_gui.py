@@ -494,13 +494,64 @@ class TestRoboEyeSenseApp:
     def test_scenario_notebook_exists(self, app):
         """The info panel should contain a tabbed notebook."""
         assert hasattr(app, "_scenario_notebook")
-        # There should be at least 2 tabs: Offset and SLAM
-        assert app._scenario_notebook.index("end") == 2
+        # There should be 3 tabs: Offset, SLAM, and Auto
+        assert app._scenario_notebook.index("end") == 3
 
     def test_slam_start_switches_to_slam_tab(self, app):
         """Starting SLAM should switch the notebook to the SLAM tab."""
         app._on_slam_start()
         assert app._scenario_notebook.index("current") == 1
+
+    # ── Window title ──────────────────────────────────────────────────────
+
+    def test_window_title_is_robot_vision(self, app):
+        """Window title should be 'robot-vision'."""
+        assert app.root.title() == "robot-vision"
+
+    # ── Layout toggle ─────────────────────────────────────────────────────
+
+    def test_layout_toggle_switches_compact_view(self, app):
+        """Toggling layout should change the _compact_view flag."""
+        assert app._compact_view is False
+        app._toggle_layout()
+        assert app._compact_view is True
+        app._toggle_layout()
+        assert app._compact_view is False
+
+    def test_layout_toggle_updates_button_label(self, app):
+        """Toggle layout button label should reflect the current state."""
+        # Initially normal view → button says "Compact view"
+        assert app._layout_btn_var.get() == "Compact view"
+        app._toggle_layout()
+        assert app._layout_btn_var.get() == "Normal view"
+        app._toggle_layout()
+        assert app._layout_btn_var.get() == "Compact view"
+
+    # ── Scenario buttons in tabs ──────────────────────────────────────────
+
+    def test_offset_tab_has_start_button(self, app):
+        """Offset scenario start button should exist (now inside the tab)."""
+        assert hasattr(app, "_scenario_start_btn")
+
+    def test_slam_tab_has_start_button(self, app):
+        """SLAM start button should exist (inside SLAM tab)."""
+        assert hasattr(app, "_slam_start_btn")
+
+    def test_auto_tab_has_start_button(self, app):
+        """Auto start button should exist (inside Auto tab)."""
+        assert hasattr(app, "_auto_start_btn")
+
+    def test_auto_tab_has_marker_entry(self, app):
+        """Auto tab should have a Follow ID entry field."""
+        assert hasattr(app, "_auto_marker_entry")
+
+    # ── Merged INFO/CAMERA/MODE panel ────────────────────────────────────
+
+    def test_info_panel_has_combined_fps_and_mode(self, app):
+        """FPS and mode info should both be accessible in the merged panel."""
+        assert hasattr(app, "_cam_fps_var")
+        assert hasattr(app, "_info_mode_var")
+        assert hasattr(app, "_cam_res_var")
 
 
 # ---------------------------------------------------------------------------
