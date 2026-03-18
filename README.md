@@ -19,6 +19,12 @@ oraz bezgłowy interfejs CLI do wdrożeń na sprzęcie wbudowanym.
 | **Śledzenie wielu obiektów** | Tracker centroidów z trwałymi ID (tryb filtru Kalmana dostępny) |
 | **Interaktywne GUI** | Panel sterowania Tkinter – zmiana trybu, przełączanie detektorów, strojenie parametrów lasera na żywo |
 | **Trzy tryby pracy** | Normal / Fast (połowa rozdzielczości) / Robust (wyostrzanie + śledzenie Kalmana) |
+| **Scenariusz Offset** | Kalibracja przesunięcia kamery – porównanie pozycji AprilTagów z estymacją odległości |
+| **SLAM – budowanie mapy markerów** | Inkrementalna mapa 3-D z estymacją pozy 6-DoF robota (`cv2.solvePnP`) |
+| **Estymacja odległości** | Model kamery otworkowej (pinhole) – odległość do każdego tagu i do pozycji referencyjnej |
+| **Nagrywanie wideo** | Zapis strumienia do pliku MP4 (`cv2.VideoWriter`) – CLI, GUI i tryb bezgłowy |
+| **Tryb bezgłowy (headless)** | Praca bez wyświetlacza – wyniki na stdout; idealne dla urządzeń wbudowanych |
+| **Podsumowanie konfiguracji** | Automatyczne wyświetlanie parametrów startowych w terminalu |
 
 Wszystkie detektory działają na każdej klatce, a ich wyniki są ujednolicane przez
 pojedynczy `CentroidTracker` przydzielający stabilne ID śledzenia. Obiekty
@@ -103,7 +109,7 @@ python main.py --mode robust
 #### Przykład: profil zorientowany na szybkość
 
 ```bash
-python main.py --mode fast --no-apriltag --no-qr --width 320 --height 240
+python main.py --mode fast --no-apriltag --width 320 --height 240
 ```
 
 #### Scenariusz Offset (kalibracja przesunięcia kamery)
@@ -144,6 +150,48 @@ wyświetla:
   obserwacji.
 - **Wizualizację 3-D** zrekonstruowanej przestrzeni (widok z góry) wraz
   z pozycją kamery.
+
+#### Estymacja odległości (scenariusz Offset)
+
+Scenariusz Offset automatycznie szacuje odległość od kamery do każdego
+widocznego AprilTaga oraz odległość przesunięcia kamery względem pozycji
+referencyjnej. Wykorzystywany jest model kamery otworkowej (pinhole):
+
+```
+distance = (tag_size_cm × focal_length_px) / apparent_size_px
+```
+
+Domyślne parametry:
+
+| Parametr | Wartość |
+|---|---|
+| Rozmiar fizyczny tagu | 5,0 cm |
+| Poziomy kąt widzenia (HFOV) | 60° |
+
+Wynik (`OffsetResult`) zawiera:
+
+- `per_tag_distances_cm` – odległość (cm) do każdego widocznego tagu.
+- `distance_to_reference_cm` – szacowana odległość (cm) między bieżącą
+  a referencyjną pozycją kamery.
+
+#### Podsumowanie konfiguracji w terminalu
+
+Przy każdym uruchomieniu program wyświetla podsumowanie aktywnej
+konfiguracji w terminalu:
+
+```
+robo-eye-sense 0.3.0
+Display mode      : display
+Detection mode    : normal
+Detectors enabled : AprilTag
+Source            : 0
+Camera opened     : 640x480 @ 30.0 FPS
+Starting detection loop...
+```
+
+Podsumowanie obejmuje tryb wyświetlania, tryb detekcji, listę włączonych
+detektorów, źródło wideo, aktywny scenariusz (jeśli ustawiony) oraz
+ścieżkę nagrywania (jeśli aktywna).
 
 ---
 
@@ -199,19 +247,23 @@ python main.py --source 2 --mode robust --gui
 
 ```
 robo_eye_sense/
-├── __init__.py          # Public surface: RoboEyeDetector, Detection, DetectionType
-├── results.py           # Detection dataclass + DetectionType / DetectionMode enums
-├── tracker.py           # CentroidTracker – assigns stable track IDs (Kalman optional)
-├── april_tag_detector.py  # Wraps pupil-apriltags
-├── qr_detector.py       # pyzbar (preferred) or cv2.QRCodeDetector fallback
-├── laser_detector.py    # Brightness threshold + size/circularity filters
-├── detector.py          # RoboEyeDetector – orchestrates all sub-detectors
-├── camera.py            # VideoCapture wrapper (context manager)
-├── offset_scenario.py   # Camera-offset calibration scenario
-├── marker_map.py        # SLAM marker map building + robot localisation
-├── recorder.py          # Video recording utility (MP4)
-└── gui.py               # Tkinter GUI (Offset + SLAM tabs, 3-D visualisation)
-main.py                  # CLI entry point
+├── __init__.py            # Public surface: RoboEyeDetector, Detection, DetectionType,
+│                          #   DetectionMode, SlamCalibrator, MarkerMap, MarkerPose3D,
+│                          #   RobotPose3D, APP_NAME, __version__
+├── results.py             # Detection dataclass + DetectionType / DetectionMode enums
+├── tracker.py             # CentroidTracker – assigns stable track IDs (Kalman optional)
+├── april_tag_detector.py  # Wraps pupil-apriltags (4 rodziny tagów jednocześnie)
+├── qr_detector.py         # pyzbar (preferred) or cv2.QRCodeDetector fallback
+├── laser_detector.py      # Brightness threshold + size/circularity filters
+├── detector.py            # RoboEyeDetector – orchestrates all sub-detectors
+│                          #   Public API: enable/disable_april(), enable/disable_qr(),
+│                          #   enable/disable_laser(), mode property (NORMAL/FAST/ROBUST)
+├── camera.py              # VideoCapture wrapper (context manager)
+├── offset_scenario.py     # Camera-offset calibration + distance estimation (pinhole model)
+├── marker_map.py          # SLAM marker map building + robot localisation (6-DoF)
+├── recorder.py            # Video recording utility (MP4, context manager)
+└── gui.py                 # Tkinter GUI (Offset + SLAM tabs, 3-D visualisation, recording)
+main.py                    # CLI entry point
 ```
 
 ### Potok detekcji (na klatkę)
@@ -240,13 +292,15 @@ RoboEyeDetector.process_frame(frame)
 |---|---|---|
 | `--width 320 --height 240` | 640×480 | Mniejsza klatka → szybsze działanie wszystkich detektorów |
 | `--laser-threshold 250` | `240` | Wyższa wartość → mniej fałszywych alarmów od lamp |
-| `--no-apriltag` / `--no-qr` / `--no-laser` | wszystkie włączone | Wyłączenie nieużywanych detektorów |
+| `--no-apriltag` | *(włączony)* | Wyłączenie detektora AprilTag oszczędza czas przetwarzania |
 | `--mode fast` | `normal` | Skaluje wejście o 50% przed detekcją (~4× mniej pikseli) |
 | `--mode robust` | `normal` | Stosuje wyostrzanie unsharp-mask + śledzenie filtrem Kalmana |
 
 ---
 
 ## Użycie programistyczne
+
+### Podstawowe wykrywanie
 
 ```python
 import cv2
@@ -280,6 +334,56 @@ with Camera(source=0, width=640, height=480) as cam:
 cv2.destroyAllWindows()
 ```
 
+### Nagrywanie wideo
+
+```python
+from robo_eye_sense.recorder import VideoRecorder
+
+with VideoRecorder("output.mp4", width=640, height=480, fps=30.0) as rec:
+    for frame in frames:
+        rec.write_frame(frame)
+```
+
+### Kalibracja Offset z estymacją odległości
+
+```python
+from robo_eye_sense.offset_scenario import compute_offset
+
+result = compute_offset(reference_detections, current_detections,
+                        frame_width=640, tag_size_cm=5.0)
+
+print(f"Przesunięcie: {result.offset}")
+print(f"Odległość do ref.: {result.distance_to_reference_cm} cm")
+for tag_id, dist in result.per_tag_distances_cm.items():
+    print(f"  Tag {tag_id}: {dist:.1f} cm")
+```
+
+### SLAM – budowanie mapy i lokalizacja
+
+```python
+from robo_eye_sense import RoboEyeDetector
+from robo_eye_sense.camera import Camera
+from robo_eye_sense.marker_map import SlamCalibrator, MarkerMap
+
+detector = RoboEyeDetector(enable_apriltag=True)
+calibrator = SlamCalibrator(tag_size_cm=5.0)
+
+with Camera(source=0, width=640, height=480) as cam:
+    for _ in range(300):
+        frame = cam.read()
+        if frame is None:
+            break
+        detections = detector.process_frame(frame)
+        robot_pose = calibrator.process_detections(detections)
+        print(f"Robot: {robot_pose.position}, mapa: {len(calibrator.marker_map)} markerów")
+
+calibrator.marker_map.save("mapa.json")
+
+# Późniejsza lokalizacja z istniejącą mapą
+marker_map = MarkerMap.load("mapa.json")
+pose = marker_map.estimate_robot_pose(detections, tag_size_cm=5.0)
+```
+
 ---
 
 ## Uruchamianie testów
@@ -292,6 +396,19 @@ pytest tests/ -v
 > **Uwaga:** Testy GUI (`tests/test_gui.py`) wymagają wyświetlacza i pakietu
 > `python3-tk`. Na maszynach CI bez wyświetlacza uruchom je przez
 > `xvfb-run pytest tests/ -v`.
+
+---
+
+## Dodatkowa dokumentacja
+
+| Dokument | Opis |
+|---|---|
+| [slam_marker_map.md](slam_marker_map.md) | Szczegółowy opis algorytmu SLAM, budowania mapy markerów i lokalizacji robota |
+| [kalibracja_kamery.md](kalibracja_kamery.md) | Kompletna instrukcja kalibracji kamery (intrinsyki, dystorsja, szachownica) |
+| [markery_wizyjne_nawigacja.md](markery_wizyjne_nawigacja.md) | Przewodnik po markerach wizyjnych w nawigacji robotów |
+| [camera-spatial-orientation.md](camera-spatial-orientation.md) | Orientacja przestrzenna kamery |
+| [github_releases_packages.md](github_releases_packages.md) | Przewodnik po GitHub Releases i Packages |
+| [CHANGELOG.md](CHANGELOG.md) | Historia zmian i wydań |
 
 ---
 
