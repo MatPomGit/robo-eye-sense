@@ -48,11 +48,14 @@ def _fix_qt_font_dir() -> None:
 _fix_qt_font_dir()
 
 if TYPE_CHECKING:
+    from .auto_scenario import AutoFollowResult, AutoFollowScenario
     from .detector import RoboEyeDetector
     from .marker_map import SlamCalibrator
 
 __all__ = [
     "APP_NAME",
+    "AutoFollowResult",
+    "AutoFollowScenario",
     "MarkerMap",
     "MarkerPose3D",
     "RobotPose3D",
@@ -89,5 +92,12 @@ def __getattr__(name: str) -> Any:
         from .marker_map import SlamCalibrator
 
         return SlamCalibrator
+
+    if name in ("AutoFollowResult", "AutoFollowScenario"):
+        from .auto_scenario import AutoFollowResult, AutoFollowScenario
+
+        if name == "AutoFollowResult":
+            return AutoFollowResult
+        return AutoFollowScenario
 
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

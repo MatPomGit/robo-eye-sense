@@ -96,6 +96,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Brightness threshold for laser-spot detection (0–255).",
     )
     parser.add_argument(
+        "--laser-threshold-max",
+        type=int,
+        default=255,
+        help="Upper brightness threshold for laser-spot detection (0–255).",
+    )
+    parser.add_argument(
         "--laser-channels",
         default="rgb",
         help=(
@@ -133,14 +139,17 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--scenario",
-        choices=["offset", "slam"],
+        choices=["offset", "slam", "auto"],
         default=None,
         help=(
             "Run a predefined scenario instead of the normal detection loop. "
             "'offset' – capture a reference frame, then compute the camera "
             "displacement vector after the camera has been moved. "
             "'slam' – incrementally build a marker map from the camera feed, "
-            "estimating the 3-D pose of every visible AprilTag and the robot."
+            "estimating the 3-D pose of every visible AprilTag and the robot. "
+            "'auto' – continuously follow a selected AprilTag marker, "
+            "computing the position vector (X, Y) and yaw rotation needed "
+            "to centre it in the frame."
         ),
     )
     parser.add_argument(
@@ -151,6 +160,15 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "Path to a marker-map JSON file.  In 'slam' scenario mode the "
             "built map is saved here on exit.  When used outside a scenario "
             "the map is loaded for robot-pose estimation."
+        ),
+    )
+    parser.add_argument(
+        "--follow-marker",
+        default=None,
+        metavar="ID",
+        help=(
+            "In 'auto' scenario mode, the ID of the AprilTag marker to "
+            "follow.  When omitted the first visible marker is used."
         ),
     )
     return parser.parse_args(argv)
@@ -201,6 +219,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         enable_laser=args.laser,
         mode=mode,
         laser_brightness_threshold=args.laser_threshold,
+        laser_brightness_threshold_max=args.laser_threshold_max,
         laser_channels=args.laser_channels,
     )
 
@@ -417,6 +436,104 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                     )
                 print(f"Map saved to      : {map_path}")
                 print(f"{'='*50}")
+        except RuntimeError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+        finally:
+            if recorder is not None:
+                recorder.stop()
+                print(f"Recording saved to {args.record}")
+            if not args.headless:
+                cv2.destroyAllWindows()
+        return 0
+
+    # ── Auto-follow scenario mode ─────────────────────────────────────────
+    if args.scenario == "auto":
+        from robo_eye_sense.auto_scenario import AutoFollowScenario
+
+        auto = AutoFollowScenario(
+            camera=cam,
+            detector=detector,
+            frame_width=cam.actual_width,
+            frame_height=cam.actual_height,
+            target_marker_id=args.follow_marker,
+        )
+
+        recorder = None
+        if args.record:
+            from robo_eye_sense.recorder import VideoRecorder
+
+            recorder = VideoRecorder(
+                args.record,
+                width=cam.actual_width,
+                height=cam.actual_height,
+                fps=cam.actual_fps or 30.0,
+            )
+
+        try:
+            with cam:
+                if recorder is not None:
+                    recorder.start()
+                    print(f"Recording to {args.record}")
+
+                follow_label = (
+                    f"marker {args.follow_marker}"
+                    if args.follow_marker
+                    else "first visible marker"
+                )
+                print(f"Starting auto-follow scenario (target: {follow_label})...")
+                if not args.headless:
+                    print("Press q in the display window to quit.")
+
+                frame_idx = 0
+                while True:
+                    frame = cam.read()
+                    if frame is None:
+                        break
+
+                    detections = detector.process_frame(frame)
+                    result = auto.compute_from_detections(detections)
+                    frame_idx += 1
+
+                    if args.headless:
+                        dx, dy = result.position_vector
+                        if result.target_found:
+                            print(
+                                f"[frame {frame_idx}] "
+                                f"target={result.target_marker_id}  "
+                                f"vector=({dx:+.1f}, {dy:+.1f}) px  "
+                                f"yaw={result.yaw:+.1f}°  "
+                                f"visible={result.visible_marker_ids}"
+                            )
+                        else:
+                            print(
+                                f"[frame {frame_idx}] "
+                                f"No target marker found  "
+                                f"visible={result.visible_marker_ids}"
+                            )
+                        if recorder is not None:
+                            vis = detector.draw_detections(frame.copy(), detections)
+                            recorder.write_frame(vis)
+                    else:
+                        vis = detector.draw_detections(frame.copy(), detections)
+                        dx, dy = result.position_vector
+                        info = (
+                            f"AUTO: target={result.target_marker_id or '-'}  "
+                            f"vec=({dx:+.1f},{dy:+.1f})  "
+                            f"yaw={result.yaw:+.1f}"
+                        )
+                        cv2.putText(
+                            vis, info, (8, 24),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                            (0, 255, 255), 1, cv2.LINE_AA,
+                        )
+                        if recorder is not None:
+                            recorder.write_frame(vis)
+                        cv2.imshow("RoboEyeSense – Auto Follow", vis)
+                        if cv2.waitKey(1) & 0xFF == ord("q"):
+                            break
+
+                print(f"Stream ended. Total frames: {frame_idx}")
         except RuntimeError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 1

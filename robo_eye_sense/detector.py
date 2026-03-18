@@ -176,6 +176,7 @@ class RoboEyeDetector:
         enable_laser: bool = False,
         mode: DetectionMode = DetectionMode.NORMAL,
         laser_brightness_threshold: int = 240,
+        laser_brightness_threshold_max: int = 255,
         laser_target_area: int = 100,
         laser_sensitivity: int = 50,
         laser_channels: str = "rgb",
@@ -208,6 +209,7 @@ class RoboEyeDetector:
         if enable_laser:
             self._laser_detector = LaserSpotDetector(
                 brightness_threshold=laser_brightness_threshold,
+                brightness_threshold_max=laser_brightness_threshold_max,
                 target_area=laser_target_area,
                 sensitivity=laser_sensitivity,
                 channels=laser_channels,
@@ -305,6 +307,7 @@ class RoboEyeDetector:
     def enable_laser(
         self,
         brightness_threshold: int = 240,
+        brightness_threshold_max: int = 255,
         target_area: int = 100,
         sensitivity: int = 50,
         channels: str = "rgb",
@@ -313,6 +316,7 @@ class RoboEyeDetector:
         if self._laser_detector is None:
             self._laser_detector = LaserSpotDetector(
                 brightness_threshold=brightness_threshold,
+                brightness_threshold_max=brightness_threshold_max,
                 target_area=target_area,
                 sensitivity=sensitivity,
                 channels=channels,

@@ -59,6 +59,7 @@ from PIL import Image, ImageDraw, ImageTk
 
 from . import APP_NAME, __version__
 from .camera import Camera
+from .auto_scenario import AutoFollowResult, AutoFollowScenario
 from .detector import RoboEyeDetector, _compute_orientation
 from .marker_map import MarkerPose3D, RobotPose3D, SlamCalibrator
 from .offset_scenario import CameraOffsetScenario, OffsetResult
@@ -252,10 +253,12 @@ class RoboEyeSenseApp:
         # Tunable parameters
         _laser = detector.laser_detector
         _init_threshold = _laser.brightness_threshold if _laser is not None else 240
+        _init_threshold_max = _laser.brightness_threshold_max if _laser is not None else 255
         _init_target_area = _laser.target_area if _laser is not None else 100
         _init_sensitivity = _laser.sensitivity if _laser is not None else 50
         _init_channels = _laser.channels if _laser is not None else "bgr"
         self._laser_threshold = tk.IntVar(value=_init_threshold)
+        self._laser_threshold_max = tk.IntVar(value=_init_threshold_max)
         self._laser_target_area = tk.IntVar(value=_init_target_area)
         self._laser_sensitivity = tk.IntVar(value=_init_sensitivity)
         self._laser_ch_r = tk.BooleanVar(value="r" in _init_channels)
@@ -267,6 +270,11 @@ class RoboEyeSenseApp:
         self._scenario: Optional[CameraOffsetScenario] = None
         self._scenario_active = False
         self._last_offset_result: Optional[OffsetResult] = None
+
+        # Auto-follow scenario state
+        self._auto_scenario: Optional[AutoFollowScenario] = None
+        self._auto_active = False
+        self._last_auto_result: Optional[AutoFollowResult] = None
 
         # SLAM state
         self._slam_calibrator: Optional[SlamCalibrator] = None
@@ -416,6 +424,23 @@ class RoboEyeSenseApp:
             command=self._on_threshold_change,
         ).pack(fill="x")
 
+        # Laser threshold max
+        ttk.Label(parent, text="Laser threshold max (0–255)").pack(
+            anchor="w", pady=(6, 0)
+        )
+        self._threshold_max_label = ttk.Label(
+            parent, text=str(self._laser_threshold_max.get())
+        )
+        self._threshold_max_label.pack(anchor="e")
+        ttk.Scale(
+            parent,
+            from_=0,
+            to=255,
+            orient="horizontal",
+            variable=self._laser_threshold_max,
+            command=self._on_threshold_max_change,
+        ).pack(fill="x")
+
         # Laser target area
         ttk.Label(parent, text="Laser target area (px)").pack(
             anchor="w", pady=(8, 0)
@@ -530,6 +555,32 @@ class RoboEyeSenseApp:
         )
         self._slam_save_btn.pack(fill="x", pady=2)
 
+        # ── Auto-follow scenario ──────────────────────────────────────────
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=8)
+        ttk.Label(parent, text="Auto Follow", font=("", 9, "bold")).pack(anchor="w")
+
+        self._auto_start_btn = ttk.Button(
+            parent,
+            text="Start auto",
+            command=self._on_auto_start,
+        )
+        self._auto_start_btn.pack(fill="x", pady=(4, 2))
+
+        # Marker-ID selector
+        _marker_frame = ttk.Frame(parent)
+        _marker_frame.pack(fill="x", pady=2)
+        ttk.Label(_marker_frame, text="Follow ID:").pack(side="left")
+        self._auto_marker_var = tk.StringVar(value="")
+        self._auto_marker_entry = ttk.Entry(
+            _marker_frame,
+            textvariable=self._auto_marker_var,
+            width=6,
+        )
+        self._auto_marker_entry.pack(side="left", padx=(4, 0))
+        self._auto_marker_entry.bind(
+            "<Return>", self._on_auto_marker_id_change,
+        )
+
         # ── Recording ─────────────────────────────────────────────────────
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=8)
         ttk.Label(parent, text="Recording", font=("", 9, "bold")).pack(anchor="w")
@@ -636,6 +687,11 @@ class RoboEyeSenseApp:
         self._scenario_notebook.add(slam_tab, text="SLAM")
         self._build_slam_tab(slam_tab)
 
+        # ── Auto tab ─────────────────────────────────────────────────────
+        auto_tab = ttk.Frame(self._scenario_notebook, padding=4)
+        self._scenario_notebook.add(auto_tab, text="Auto")
+        self._build_auto_tab(auto_tab)
+
     # ──────────────────────────────────────────────────────────────────────
     # Control callbacks
     # ──────────────────────────────────────────────────────────────────────
@@ -692,6 +748,41 @@ class RoboEyeSenseApp:
         self._slam_3d_canvas.pack(fill="both", expand=True)
         self._slam_3d_image_id: Optional[int] = None
 
+    def _build_auto_tab(self, parent: ttk.Frame) -> None:
+        """Build the Auto-follow scenario tab contents."""
+        ttk.Label(parent, text="Follow vector", font=("", 9, "bold")).pack(
+            anchor="w"
+        )
+        self._auto_info_var = tk.StringVar(
+            value="Auto-follow not started.\nClick 'Start auto' to begin."
+        )
+        ttk.Label(
+            parent,
+            textvariable=self._auto_info_var,
+            font=("Courier", 8),
+            wraplength=200,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 4))
+
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
+
+        ttk.Label(parent, text="Visible markers", font=("", 9, "bold")).pack(
+            anchor="w"
+        )
+        auto_list_frame = ttk.Frame(parent)
+        auto_list_frame.pack(fill="x")
+        auto_scroll = ttk.Scrollbar(auto_list_frame, orient="vertical")
+        self._auto_markers_list = tk.Listbox(
+            auto_list_frame,
+            yscrollcommand=auto_scroll.set,
+            font=("Courier", 7),
+            selectmode=tk.SINGLE,
+            height=6,
+        )
+        auto_scroll.config(command=self._auto_markers_list.yview)
+        self._auto_markers_list.pack(side="left", fill="both", expand=True)
+        auto_scroll.pack(side="right", fill="y")
+
     def _set_mode(self, mode: DetectionMode) -> None:
         """Programmatically switch to *mode* and update all UI elements."""
         label = _MODE_DISPLAY_INV.get(mode, "Normal")
@@ -728,6 +819,7 @@ class RoboEyeSenseApp:
         if self._enable_laser.get():
             self.detector.enable_laser(
                 brightness_threshold=self._laser_threshold.get(),
+                brightness_threshold_max=self._laser_threshold_max.get(),
                 target_area=self._laser_target_area.get(),
                 sensitivity=self._laser_sensitivity.get(),
                 channels=self._laser_channels_str(),
@@ -759,6 +851,14 @@ class RoboEyeSenseApp:
         laser = self.detector.laser_detector
         if laser is not None:
             laser.brightness_threshold = val
+
+    def _on_threshold_max_change(self, _value: Optional[str] = None) -> None:
+        """Apply the new laser threshold-max value."""
+        val = self._laser_threshold_max.get()
+        self._threshold_max_label.config(text=str(val))
+        laser = self.detector.laser_detector
+        if laser is not None:
+            laser.brightness_threshold_max = val
 
     def _on_target_area_change(self, _value: Optional[str] = None) -> None:
         """Apply the new laser target-area value."""
@@ -916,6 +1016,43 @@ class RoboEyeSenseApp:
         if not path:
             return
         self._slam_calibrator.marker_map.save(path)
+
+    # ── Auto-follow callbacks ─────────────────────────────────────────────
+
+    def _on_auto_start(self) -> None:
+        """Start or stop the auto-follow scenario."""
+        if self._auto_active:
+            self._auto_active = False
+            self._auto_scenario = None
+            self._last_auto_result = None
+            self._auto_start_btn.config(text="Start auto")
+            self._auto_info_var.set(
+                "Auto-follow not started.\n"
+                "Click 'Start auto' to begin."
+            )
+            self._auto_markers_list.delete(0, tk.END)
+        else:
+            marker_id = self._auto_marker_var.get().strip() or None
+            self._auto_scenario = AutoFollowScenario(
+                camera=self.camera,
+                detector=self.detector,
+                frame_width=self.camera.actual_width,
+                frame_height=self.camera.actual_height,
+                target_marker_id=marker_id,
+            )
+            self._auto_active = True
+            self._last_auto_result = None
+            self._auto_start_btn.config(text="Stop auto")
+            self._auto_info_var.set("Auto-follow started.\nWaiting for markers…")
+            # Switch to Auto tab
+            self._scenario_notebook.select(2)
+
+    def _on_auto_marker_id_change(self, _event: Optional[object] = None) -> None:
+        """Update the target marker ID for auto-follow."""
+        if self._auto_scenario is None:
+            return
+        marker_id = self._auto_marker_var.get().strip() or None
+        self._auto_scenario.target_marker_id = marker_id
 
     # ── Recording callbacks ───────────────────────────────────────────────
 
@@ -1108,6 +1245,12 @@ class RoboEyeSenseApp:
             self._last_robot_pose = robot_pose
             self._update_slam_display(robot_pose)
 
+        # Auto-follow: continuous vector computation
+        if self._auto_active and self._auto_scenario is not None:
+            result = self._auto_scenario.compute_from_detections(detections)
+            self._last_auto_result = result
+            self._update_auto_display(result)
+
     def _update_scenario_display(self, result: OffsetResult) -> None:
         """Refresh the scenario text widget with the latest offset data."""
         lines = []
@@ -1189,6 +1332,27 @@ class RoboEyeSenseApp:
             self._slam_3d_canvas.coords(self._slam_3d_image_id, cx, cy)
             self._slam_3d_canvas.itemconfigure(
                 self._slam_3d_image_id, image=self._slam_3d_tk_image
+            )
+
+    def _update_auto_display(self, result: AutoFollowResult) -> None:
+        """Refresh the Auto tab with the latest follow vector data."""
+        dx, dy = result.position_vector
+        if result.target_found:
+            self._auto_info_var.set(
+                f"Target: {result.target_marker_id}\n"
+                f"Vector: ({dx:+.1f}, {dy:+.1f}) px\n"
+                f"Yaw: {result.yaw:+.1f}°"
+            )
+        else:
+            self._auto_info_var.set("No target marker visible.")
+
+        self._auto_markers_list.delete(0, tk.END)
+        for mid in result.visible_marker_ids:
+            pos = result.marker_positions.get(mid, (0, 0))
+            prefix = "→ " if mid == result.target_marker_id else "  "
+            self._auto_markers_list.insert(
+                tk.END,
+                f"{prefix}{mid:>4s}  pos=({pos[0]},{pos[1]})",
             )
 
     # ──────────────────────────────────────────────────────────────────────

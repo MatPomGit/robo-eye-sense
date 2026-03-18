@@ -60,6 +60,11 @@ class LaserSpotDetector:
         used.  When a subset is selected, only the chosen channels are
         averaged to produce the brightness image, making it possible to
         isolate e.g. a red laser by passing ``channels="r"``.
+    brightness_threshold_max:
+        Upper grayscale intensity threshold (0-255).  Only pixels with
+        brightness between *brightness_threshold* and
+        *brightness_threshold_max* are considered candidates.  Default
+        ``255`` preserves the original behaviour (no upper bound).
     """
 
     def __init__(
@@ -71,10 +76,20 @@ class LaserSpotDetector:
         target_area: int = 100,
         sensitivity: int = 50,
         channels: str = "rgb",
+        brightness_threshold_max: int = 255,
     ) -> None:
         if not (0 <= brightness_threshold <= 255):
             raise ValueError(
                 f"brightness_threshold must be in [0, 255], got {brightness_threshold}"
+            )
+        if not (0 <= brightness_threshold_max <= 255):
+            raise ValueError(
+                f"brightness_threshold_max must be in [0, 255], got {brightness_threshold_max}"
+            )
+        if brightness_threshold_max < brightness_threshold:
+            raise ValueError(
+                f"brightness_threshold_max ({brightness_threshold_max}) must be "
+                f">= brightness_threshold ({brightness_threshold})"
             )
         if min_area < 0:
             raise ValueError(f"min_area must be >= 0, got {min_area}")
@@ -83,6 +98,7 @@ class LaserSpotDetector:
                 f"max_area ({max_area}) must be greater than min_area ({min_area})"
             )
         self.brightness_threshold = brightness_threshold
+        self.brightness_threshold_max = brightness_threshold_max
         self.min_area = min_area
         self.max_area = max_area
         self.min_circularity = min_circularity
@@ -176,10 +192,18 @@ class LaserSpotDetector:
             else:
                 gray = np.mean(frame[:, :, indices], axis=2).astype(np.uint8)
 
-        # Isolate very bright regions and store the raw mask for the GUI overlay
-        _, thresh = cv2.threshold(
-            gray, self.brightness_threshold, 255, cv2.THRESH_BINARY
-        )
+        # Isolate bright regions within the configured intensity range
+        # and store the raw mask for the GUI overlay.
+        if self.brightness_threshold_max < 255:
+            thresh = cv2.inRange(
+                gray,
+                np.array(self.brightness_threshold, dtype=np.uint8),
+                np.array(self.brightness_threshold_max, dtype=np.uint8),
+            )
+        else:
+            _, thresh = cv2.threshold(
+                gray, self.brightness_threshold, 255, cv2.THRESH_BINARY
+            )
         self.last_threshold_mask = thresh.copy()
 
         # Morphological close to fill small holes inside a spot
