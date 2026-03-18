@@ -103,6 +103,15 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Upper brightness threshold for laser-spot detection (0–255).",
     )
     parser.add_argument(
+        "--laser-channels",
+        default="rgb",
+        help=(
+            "Colour channels to analyse for laser detection. "
+            "A combination of 'r', 'g', 'b' (default: 'rgb' – all channels). "
+            "E.g. 'r' to detect only in the red channel."
+        ),
+    )
+    parser.add_argument(
         "--mode",
         default="normal",
         choices=["normal", "fast", "robust"],
@@ -236,9 +245,10 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         enable_qr=args.qr,
         enable_laser=args.laser,
         mode=mode,
-        laser_brightness_threshold=args.laser_threshold,
+        laser_brightness_threshold_min=args.laser_threshold_min,
         laser_brightness_threshold_max=args.laser_threshold_max,
         tag_names=tag_names,
+        laser_channels=args.laser_channels,
     )
 
     # Accept both integer camera indices (e.g. 0, 1) and string paths/URLs

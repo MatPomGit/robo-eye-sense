@@ -175,11 +175,12 @@ class RoboEyeDetector:
         enable_qr: bool = False,
         enable_laser: bool = False,
         mode: DetectionMode = DetectionMode.NORMAL,
-        laser_brightness_threshold: int = 240,
+        laser_brightness_threshold_min: int = 240,
         laser_brightness_threshold_max: int = 255,
         laser_target_area: int = 100,
         laser_sensitivity: int = 50,
         tag_names: Optional[Dict[str, str]] = None,
+        laser_channels: str = "rgb",
         tracker_max_disappeared: int = 10,
         tracker_max_distance: int = 50,
     ) -> None:
@@ -214,6 +215,7 @@ class RoboEyeDetector:
                 brightness_threshold_max=laser_brightness_threshold_max,
                 target_area=laser_target_area,
                 sensitivity=laser_sensitivity,
+                channels=laser_channels,
             )
 
         # Create tracker with parameters appropriate for the requested mode.
@@ -320,6 +322,7 @@ class RoboEyeDetector:
         brightness_threshold_max: int = 255,
         target_area: int = 100,
         sensitivity: int = 50,
+        channels: str = "rgb",
     ) -> None:
         """Enable the laser-spot detector with the given parameters."""
         if self._laser_detector is None:
@@ -328,6 +331,7 @@ class RoboEyeDetector:
                 brightness_threshold_max=brightness_threshold_max,
                 target_area=target_area,
                 sensitivity=sensitivity,
+                channels=channels,
             )
 
     def disable_laser(self) -> None:

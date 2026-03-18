@@ -20,6 +20,9 @@ import numpy as np
 
 from .results import Detection, DetectionType
 
+# Valid single-character channel identifiers and their BGR indices
+_CHANNEL_BGR_INDEX = {"b": 0, "g": 1, "r": 2}
+
 
 class LaserSpotDetector:
     """Detect bright point-illumination spots (e.g. laser pointers) in a frame.
@@ -54,6 +57,14 @@ class LaserSpotDetector:
         are accepted (fewer but more reliable detections).  At high values
         the acceptance window widens and circularity requirements are relaxed
         (more detections, potentially including weaker spots).  Default ``50``.
+    channels:
+        Which colour channels of the BGR image to analyse.  A string
+        containing any combination of ``'r'``, ``'g'``, and ``'b'``
+        (order does not matter).  When all three channels are selected
+        (default ``"rgb"``), standard weighted grayscale conversion is
+        used.  When a subset is selected, only the chosen channels are
+        averaged to produce the brightness image, making it possible to
+        isolate e.g. a red laser by passing ``channels="r"``.
     """
 
     def __init__(
@@ -65,6 +76,7 @@ class LaserSpotDetector:
         min_circularity: float = 0.2,
         target_area: int = 100,
         sensitivity: int = 50,
+        channels: str = "rgb",
     ) -> None:
         if not (0 <= brightness_threshold <= 255):
             raise ValueError(
@@ -92,8 +104,31 @@ class LaserSpotDetector:
         self.min_circularity = min_circularity
         self.target_area = target_area
         self.sensitivity = max(0, min(100, sensitivity))
+        self.channels = channels  # validated by the property setter
         # Set after each detect() call; used by the GUI threshold overlay.
         self.last_threshold_mask: Optional[np.ndarray] = None
+
+    # ------------------------------------------------------------------
+    # channels property
+    # ------------------------------------------------------------------
+
+    @property
+    def channels(self) -> str:
+        """Active colour channels (a subset of ``"rgb"``)."""
+        return self._channels
+
+    @channels.setter
+    def channels(self, value: str) -> None:
+        normalized = "".join(sorted(set(value.lower())))
+        if not normalized or not all(ch in _CHANNEL_BGR_INDEX for ch in normalized):
+            raise ValueError(
+                f"channels must be a non-empty subset of 'r', 'g', 'b', got {value!r}"
+            )
+        self._channels = normalized
+
+    # ------------------------------------------------------------------
+    # Sensitivity / area helpers
+    # ------------------------------------------------------------------
 
     def _compute_effective_area_bounds(self) -> tuple[int, int]:
         """Compute the effective min/max area window from sensitivity.
@@ -143,7 +178,19 @@ class LaserSpotDetector:
             ``identifier=None``, the spot centre, and a bounding-rect
             approximation of the corners.
         """
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        # Build a single-channel brightness image from the selected channels.
+        # When all three channels are active the standard weighted grayscale
+        # conversion is used (backward-compatible).  Otherwise only the
+        # selected channels are averaged so that, e.g., a red laser can be
+        # isolated by setting channels="r".
+        if self._channels == "bgr":
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        else:
+            indices = [_CHANNEL_BGR_INDEX[ch] for ch in self._channels]
+            if len(indices) == 1:
+                gray = frame[:, :, indices[0]]
+            else:
+                gray = np.mean(frame[:, :, indices], axis=2).astype(np.uint8)
 
         # Isolate pixels within the brightness range and store the raw mask
         # for the GUI overlay.
