@@ -53,6 +53,7 @@ Press **q** to quit the OpenCV display window (non-GUI, non-headless mode).
 from __future__ import annotations
 
 import argparse
+import io
 import sys
 import time
 
@@ -93,7 +94,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--laser-threshold",
         type=int,
         default=240,
-        help="Brightness threshold for laser-spot detection (0–255).",
+        help="Lower brightness threshold for laser-spot detection (0–255).",
+    )
+    parser.add_argument(
+        "--laser-threshold-max",
+        type=int,
+        default=255,
+        help="Upper brightness threshold for laser-spot detection (0–255).",
     )
     parser.add_argument(
         "--laser-threshold-max",
@@ -169,9 +176,42 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=(
             "In 'auto' scenario mode, the ID of the AprilTag marker to "
             "follow.  When omitted the first visible marker is used."
+        "--info",
+        action="store_true",
+        help=(
+            "Print camera information (resolution, FPS, backend, and all "
+            "available parameters) and exit."
+        ),
+    )
+    parser.add_argument(
+        "--tag-names",
+        nargs="*",
+        default=None,
+        metavar="ID=NAME",
+        help=(
+            "Assign human-readable names to AprilTag IDs. "
+            "Format: ID=NAME (e.g. --tag-names 1=box 2=table 5=wall)."
         ),
     )
     return parser.parse_args(argv)
+
+
+def _parse_tag_names(raw: list[str] | None) -> dict[str, str]:
+    """Parse ``--tag-names`` arguments into a ``{id: name}`` dict."""
+    if not raw:
+        return {}
+    mapping: dict[str, str] = {}
+    for item in raw:
+        if "=" not in item:
+            print(
+                f"WARNING: ignoring invalid --tag-names entry {item!r} "
+                "(expected ID=NAME format)",
+                file=sys.stderr,
+            )
+            continue
+        tag_id, name = item.split("=", 1)
+        mapping[tag_id.strip()] = name.strip()
+    return mapping
 
 
 def _display_mode_label(args: argparse.Namespace) -> str:
@@ -213,13 +253,16 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
     if args.record:
         print(f"Record to         : {args.record}")
 
+    tag_names = _parse_tag_names(args.tag_names)
+
     detector = RoboEyeDetector(
         enable_apriltag=not args.no_apriltag,
         enable_qr=args.qr,
         enable_laser=args.laser,
         mode=mode,
-        laser_brightness_threshold=args.laser_threshold,
+        laser_brightness_threshold_min=args.laser_threshold_min,
         laser_brightness_threshold_max=args.laser_threshold_max,
+        tag_names=tag_names,
         laser_channels=args.laser_channels,
     )
 
@@ -241,6 +284,18 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         f"Camera opened     : {cam.actual_width}x{cam.actual_height} "
         f"@ {cam.actual_fps:.1f} FPS"
     )
+
+    # ── Info mode ─────────────────────────────────────────────────────
+    if args.info:
+        info = cam.get_info()
+        print(f"\n{'='*50}")
+        print("Camera information")
+        print(f"{'='*50}")
+        for key, value in info.items():
+            print(f"  {key:<16s}: {value}")
+        print(f"{'='*50}")
+        cam.release()
+        return 0
 
     # ── Scenario mode ─────────────────────────────────────────────────────
     if args.scenario == "offset":
@@ -271,6 +326,8 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                 if args.headless:
                     # Headless scenario: capture reference immediately,
                     # then compute offset on next frame and exit.
+                    # Type "ref" on stdin to re-capture the reference, or
+                    # "quit" to exit.
                     print("Capturing reference frame...")
                     ref = scenario.capture_reference()
                     april_ref = [
@@ -290,6 +347,83 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
 
                     print("Capturing current frame and computing offset...")
                     result = scenario.compute_current_offset()
+
+                    print(f"\n{'='*50}")
+                    print("Camera-offset result")
+                    print(f"{'='*50}")
+                    print(f"Matched AprilTags : {result.matched_tags}")
+                    dx, dy = result.offset
+                    print(f"Offset (dx, dy)   : ({dx:+.1f}, {dy:+.1f}) px")
+                    if result.per_tag_offsets:
+                        print("\nPer-tag offsets:")
+                        for tag_id, (tdx, tdy) in sorted(
+                            result.per_tag_offsets.items()
+                        ):
+                            print(f"  tag {tag_id:>4s}: ({tdx:+.1f}, {tdy:+.1f}) px")
+                    print(f"{'='*50}")
+
+                    # Enter command loop for re-capture
+                    print(
+                        "Commands: 'ref' = new reference, "
+                        "'offset' = compute offset, 'quit' = exit."
+                    )
+                    import select
+
+                    try:
+                        while True:
+                            # Non-blocking check for stdin availability;
+                            # fall through immediately when stdin is not a
+                            # terminal (e.g. piped / EOF).
+                            try:
+                                ready, _, _ = select.select(
+                                    [sys.stdin], [], [], 0.1
+                                )
+                            except (ValueError, OSError):
+                                # stdin doesn't support fileno() (e.g. in
+                                # test harness or when stdin is closed).
+                                break
+                            if not ready:
+                                # No input available and stdin is still open –
+                                # exit if there is nothing more to read
+                                # (non-interactive pipe).
+                                if sys.stdin.closed or not sys.stdin.isatty():
+                                    break
+                                continue
+                            try:
+                                line = sys.stdin.readline()
+                            except EOFError:
+                                break
+                            if not line:
+                                break
+                            cmd = line.strip().lower()
+                            if cmd in ("quit", "q", "exit"):
+                                break
+                            elif cmd == "ref":
+                                print("Capturing new reference frame...")
+                                ref = scenario.capture_reference()
+                                april_ref = [
+                                    d
+                                    for d in ref
+                                    if d.detection_type == DetectionType.APRIL_TAG
+                                ]
+                                print(
+                                    f"New reference captured: "
+                                    f"{len(april_ref)} AprilTag(s) detected."
+                                )
+                            elif cmd == "offset":
+                                print("Computing offset...")
+                                result = scenario.compute_current_offset()
+                                dx, dy = result.offset
+                                print(f"Matched: {result.matched_tags}  "
+                                      f"Offset: ({dx:+.1f}, {dy:+.1f}) px")
+                            elif cmd:
+                                print(f"Unknown command: {cmd!r}")
+                    except io.UnsupportedOperation:
+                        # stdin may be a pseudofile in test harnesses or
+                        # other environments that don't support fileno().
+                        pass
+
+                    print("Offset scenario finished.")
                 else:
                     input(
                         "Place the camera at the REFERENCE position with AprilTags "
@@ -318,20 +452,20 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                     print("Capturing current frame and computing offset...")
                     result = scenario.compute_current_offset()
 
-                print(f"\n{'='*50}")
-                print("Camera-offset result")
-                print(f"{'='*50}")
-                print(f"Matched AprilTags : {result.matched_tags}")
-                dx, dy = result.offset
-                print(f"Offset (dx, dy)   : ({dx:+.1f}, {dy:+.1f}) px")
-                if result.per_tag_offsets:
-                    print("\nPer-tag offsets:")
-                    for tag_id, (tdx, tdy) in sorted(
-                        result.per_tag_offsets.items()
-                    ):
-                        print(f"  tag {tag_id:>4s}: ({tdx:+.1f}, {tdy:+.1f}) px")
-                print(f"{'='*50}")
-                print("Offset scenario finished.")
+                    print(f"\n{'='*50}")
+                    print("Camera-offset result")
+                    print(f"{'='*50}")
+                    print(f"Matched AprilTags : {result.matched_tags}")
+                    dx, dy = result.offset
+                    print(f"Offset (dx, dy)   : ({dx:+.1f}, {dy:+.1f}) px")
+                    if result.per_tag_offsets:
+                        print("\nPer-tag offsets:")
+                        for tag_id, (tdx, tdy) in sorted(
+                            result.per_tag_offsets.items()
+                        ):
+                            print(f"  tag {tag_id:>4s}: ({tdx:+.1f}, {tdy:+.1f}) px")
+                    print(f"{'='*50}")
+                    print("Offset scenario finished.")
         except RuntimeError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 1

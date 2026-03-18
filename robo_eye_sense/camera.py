@@ -8,7 +8,7 @@ URLs (RTSP, HTTP).
 
 from __future__ import annotations
 
-from typing import Optional, Union
+from typing import Dict, Optional, Union
 
 import cv2
 import numpy as np
@@ -83,9 +83,51 @@ class Camera:
         return self._cap.get(cv2.CAP_PROP_FPS)
 
     @property
+    def backend_name(self) -> str:
+        """Backend name reported by the capture device (e.g. ``V4L2``)."""
+        return self._cap.getBackendName()
+
+    @property
     def is_opened(self) -> bool:
         """``True`` if the capture device is currently open."""
         return self._cap.isOpened()
+
+    def get_info(self) -> Dict[str, object]:
+        """Return a dictionary of camera / capture-device parameters.
+
+        Keys always present: ``width``, ``height``, ``fps``, ``backend``.
+        Additional keys (``brightness``, ``contrast``, ``saturation``,
+        ``exposure``, ``gain``, ``fourcc``) are included when the capture
+        backend reports non-zero values.
+        """
+        info: Dict[str, object] = {
+            "width": self.actual_width,
+            "height": self.actual_height,
+            "fps": self.actual_fps,
+            "backend": self.backend_name,
+        }
+
+        # Optional properties – only include when the driver reports them.
+        _optional: list[tuple[str, int]] = [
+            ("brightness", cv2.CAP_PROP_BRIGHTNESS),
+            ("contrast", cv2.CAP_PROP_CONTRAST),
+            ("saturation", cv2.CAP_PROP_SATURATION),
+            ("exposure", cv2.CAP_PROP_EXPOSURE),
+            ("gain", cv2.CAP_PROP_GAIN),
+        ]
+        for name, prop_id in _optional:
+            val = self._cap.get(prop_id)
+            if val != 0.0:
+                info[name] = val
+
+        fourcc_code = int(self._cap.get(cv2.CAP_PROP_FOURCC))
+        if fourcc_code != 0:
+            fourcc_str = "".join(
+                chr((fourcc_code >> (8 * i)) & 0xFF) for i in range(4)
+            )
+            info["fourcc"] = fourcc_str
+
+        return info
 
     # ------------------------------------------------------------------
     # Resource management
