@@ -222,6 +222,27 @@ class Camera:
     # Resource management
     # ------------------------------------------------------------------
 
+    def set_capture_properties(
+        self,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+        fps: Optional[int] = None,
+    ) -> None:
+        """Change capture width, height, and/or FPS at runtime.
+
+        Updates the internal target values so that reconnection also uses
+        the new settings.
+        """
+        if width is not None:
+            self._width = width
+            self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+        if height is not None:
+            self._height = height
+            self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        if fps is not None:
+            self._fps = fps
+            self._cap.set(cv2.CAP_PROP_FPS, fps)
+
     def release(self) -> None:
         """Release the underlying ``VideoCapture`` object."""
         self._cap.release()

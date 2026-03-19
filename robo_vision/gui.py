@@ -104,6 +104,17 @@ _MODE_CHOICES: list[str] = ["Basic", "Offset", "SLAM", "Follow", "Calibration", 
 # Minimum number of chessboard captures before calibration can be run
 _CALIB_MIN_CAPTURES: int = 15
 
+# BGR colours for the mode-indicator crosshair lines drawn on the camera feed
+_MODE_LINE_COLORS: dict[str, tuple[int, int, int]] = {
+    "Basic":       (128, 128, 128),  # gray
+    "Offset":      (255, 100,   0),  # blue
+    "SLAM":        (  0, 200,   0),  # green
+    "Follow":      (255, 255,   0),  # cyan
+    "Calibration": (  0, 200, 200),  # yellow
+    "Box":         (  0, 140, 255),  # orange
+    "Pose":        (255,   0, 200),  # magenta
+}
+
 
 def render_3d_scene(
     width: int,
@@ -315,6 +326,17 @@ class RoboEyeSenseApp:
 
         # Layout state
         self._compact_view = False
+
+        # Notebook ↔ combobox sync flag (prevents infinite feedback loop)
+        self._mode_changing = False
+
+        # Camera resolution/FPS settings
+        _res_choices = ["320x240", "640x480", "1280x720", "1920x1080"]
+        _res_init = f"{camera.actual_width}x{camera.actual_height}"
+        self._res_var = tk.StringVar(
+            value=_res_init if _res_init in _res_choices else "640x480"
+        )
+        self._fps_target_var = tk.StringVar(value="30")
 
         # Build the UI
         self._build_ui()
@@ -580,6 +602,40 @@ class RoboEyeSenseApp:
             font=("", 8, "italic"),
         ).pack(anchor="w")
 
+        # ── Camera settings ───────────────────────────────────────────────
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=3)
+        ttk.Label(parent, text="Camera settings", font=("", 9, "bold")).pack(
+            anchor="w"
+        )
+
+        res_frame = ttk.Frame(parent)
+        res_frame.pack(fill="x", pady=(2, 0))
+        ttk.Label(res_frame, text="Resolution:").pack(side="left")
+        ttk.Combobox(
+            res_frame,
+            textvariable=self._res_var,
+            values=["320x240", "640x480", "1280x720", "1920x1080"],
+            state="readonly",
+            width=11,
+        ).pack(side="left", padx=(4, 0))
+
+        fps_frame = ttk.Frame(parent)
+        fps_frame.pack(fill="x", pady=(2, 0))
+        ttk.Label(fps_frame, text="Target FPS:").pack(side="left")
+        ttk.Combobox(
+            fps_frame,
+            textvariable=self._fps_target_var,
+            values=["15", "24", "30", "60"],
+            state="readonly",
+            width=5,
+        ).pack(side="left", padx=(4, 0))
+
+        ttk.Button(
+            parent,
+            text="Apply camera settings",
+            command=self._on_apply_camera_settings,
+        ).pack(fill="x", pady=(4, 2))
+
         # ── Layout toggle ─────────────────────────────────────────────────
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=3)
         self._layout_btn_var = tk.StringVar(value="Compact view")
@@ -698,6 +754,12 @@ class RoboEyeSenseApp:
         self._mode_notebook.add(pose_tab, text="Pose")
         self._build_pose_tab(pose_tab)
         self._pose_tab = pose_tab
+
+        # Bind AFTER all tabs are added so that initial tab selection
+        # during construction does not trigger the handler.
+        self._mode_notebook.bind(
+            "<<NotebookTabChanged>>", self._on_notebook_tab_changed
+        )
 
     def _build_offset_tab(self, parent: ttk.Frame) -> None:
         """Build the Offset mode tab contents."""
@@ -990,21 +1052,61 @@ class RoboEyeSenseApp:
     def _on_mode_change(self, _event: Optional[object] = None) -> None:
         """Switch to the selected mode."""
         new_mode = self._mode_var.get()
-        # Stop all currently active modes
-        self._stop_all_modes()
-        # Start the newly selected mode
-        if new_mode == "Offset":
-            self._start_offset_mode()
-        elif new_mode == "SLAM":
-            self._start_slam_mode()
-        elif new_mode == "Follow":
-            self._start_follow_mode()
-        elif new_mode == "Calibration":
-            self._start_calibration_mode()
-        elif new_mode == "Box":
-            self._start_box_mode()
-        elif new_mode == "Pose":
-            self._start_pose_mode()
+        self._mode_changing = True
+        try:
+            # Stop all currently active modes
+            self._stop_all_modes()
+            # Start the newly selected mode
+            if new_mode == "Offset":
+                self._start_offset_mode()
+            elif new_mode == "SLAM":
+                self._start_slam_mode()
+            elif new_mode == "Follow":
+                self._start_follow_mode()
+            elif new_mode == "Calibration":
+                self._start_calibration_mode()
+            elif new_mode == "Box":
+                self._start_box_mode()
+            elif new_mode == "Pose":
+                self._start_pose_mode()
+        finally:
+            self._mode_changing = False
+
+    # Ordered list of mode names corresponding to notebook tab indices 0..5
+    _NOTEBOOK_TAB_MODES: List[str] = [
+        "Offset", "SLAM", "Follow", "Calibration", "Box", "Pose"
+    ]
+
+    def _on_notebook_tab_changed(self, _event: Optional[object] = None) -> None:
+        """Sync the mode combobox when the user manually selects a notebook tab."""
+        if self._mode_changing:
+            return
+        try:
+            tab_idx = self._mode_notebook.index(self._mode_notebook.select())
+        except Exception:
+            return
+        if 0 <= tab_idx < len(self._NOTEBOOK_TAB_MODES):
+            new_mode = self._NOTEBOOK_TAB_MODES[tab_idx]
+            if new_mode != self._mode_var.get():
+                self._mode_var.set(new_mode)
+                self._on_mode_change()
+
+    def _on_apply_camera_settings(self) -> None:
+        """Apply the selected resolution and FPS to the camera."""
+        res = self._res_var.get()
+        w: Optional[int] = None
+        h: Optional[int] = None
+        if "x" in res:
+            try:
+                w, h = (int(v) for v in res.split("x", 1))
+            except ValueError:
+                pass
+        fps: Optional[int] = None
+        try:
+            fps = int(self._fps_target_var.get())
+        except ValueError:
+            pass
+        self.camera.set_capture_properties(width=w, height=h, fps=fps)
 
     def _stop_all_modes(self) -> None:
         """Stop every active mode and reset UI to the idle state."""
@@ -1495,11 +1597,28 @@ class RoboEyeSenseApp:
                 f"Box mode active.\nDetected boxes: {box_count}"
             )
 
-        # Pose estimation overlay
+        # Pose estimation overlay — pass already-detected April tags so that
+        # PoseMode does not need to run a second AprilTag detector instance.
         if self._pose_active and self._pose_mode_obj is not None:
+            april_tags = [
+                d for d in detections
+                if d.detection_type == DetectionType.APRIL_TAG
+            ]
             vis = self._pose_mode_obj.run(
-                vis, {"fps": self._fps_display, "headless": False}
+                vis,
+                {
+                    "fps": self._fps_display,
+                    "headless": False,
+                    "april_detections": april_tags,
+                },
             )
+
+        # Mode-coloured crosshair lines drawn on top of all other annotations
+        _h, _w = vis.shape[:2]
+        _cx, _cy = _w // 2, _h // 2
+        _line_color = _MODE_LINE_COLORS.get(self._mode_var.get(), (128, 128, 128))
+        cv2.line(vis, (_cx, 0), (_cx, _h), _line_color, 1, cv2.LINE_AA)
+        cv2.line(vis, (0, _cy), (_w, _cy), _line_color, 1, cv2.LINE_AA)
 
         # Overlay FPS
         cv2.putText(
