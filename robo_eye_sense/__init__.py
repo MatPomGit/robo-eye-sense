@@ -64,6 +64,11 @@ __all__ = [
     "Detection",
     "DetectionMode",
     "DetectionType",
+    "classify_tag",
+    "load_tag_names_from_file",
+    "get_device_status",
+    "get_calibration_info",
+    "print_headless_guide",
     "__version__",
 ]
 APP_NAME = "robo-eye-sense"
@@ -99,5 +104,16 @@ def __getattr__(name: str) -> Any:
         if name == "AutoFollowResult":
             return AutoFollowResult
         return AutoFollowScenario
+
+    if name in (
+        "classify_tag",
+        "load_tag_names_from_file",
+        "get_device_status",
+        "get_calibration_info",
+        "print_headless_guide",
+    ):
+        from . import headless_guide as _hg
+
+        return getattr(_hg, name)
 
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import json
 import os
 import sys
 import time
@@ -236,6 +237,26 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "Format: ID=NAME (e.g. --tag-names 1=box 2=table 5=wall)."
         ),
     )
+    parser.add_argument(
+        "--tag-names-file",
+        default=None,
+        metavar="FILE",
+        help=(
+            "Path to a JSON file with custom AprilTag names. "
+            "The file must contain a JSON object mapping ID strings to "
+            "names, e.g. {\"5\": \"package-A\", \"12\": \"table-left\"}. "
+            "Entries from this file take precedence over --tag-names."
+        ),
+    )
+    parser.add_argument(
+        "--guide",
+        action="store_true",
+        help=(
+            "Print a comprehensive headless guide: device status, "
+            "available cameras, calibration info, AprilTag classification "
+            "rules, and loaded tag names, then exit."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -297,6 +318,38 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         print(f"Record to         : {args.record}")
 
     tag_names = _parse_tag_names(args.tag_names)
+
+    # Merge tag names from file (file entries take precedence over CLI).
+    if args.tag_names_file:
+        from robo_eye_sense.headless_guide import load_tag_names_from_file
+
+        if os.path.isfile(args.tag_names_file):
+            try:
+                file_names = load_tag_names_from_file(args.tag_names_file)
+                tag_names.update(file_names)
+            except (json.JSONDecodeError, TypeError, OSError) as exc:
+                print(
+                    f"WARNING: could not load tag names from "
+                    f"{args.tag_names_file!r}: {exc}",
+                    file=sys.stderr,
+                )
+        else:
+            print(
+                f"WARNING: tag names file not found: {args.tag_names_file!r}",
+                file=sys.stderr,
+            )
+
+    # ── Guide mode ────────────────────────────────────────────────────
+    if args.guide:
+        from robo_eye_sense.headless_guide import print_headless_guide
+
+        report = print_headless_guide(
+            calib_path=args.calib_output,
+            tag_names_file=args.tag_names_file,
+            tag_names=tag_names,
+        )
+        print(report)
+        return 0
 
     detector = RoboEyeDetector(
         enable_apriltag=not args.no_apriltag,
