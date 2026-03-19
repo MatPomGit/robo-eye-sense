@@ -241,7 +241,7 @@ class RoboEyeSenseApp:
         self.camera = camera
         self.detector = detector
 
-        self.root.title(f"{APP_NAME} v{__version__}")
+        self.root.title("robot-vision")
         self.root.resizable(True, True)
 
         # ── State variables ──────────────────────────────────────────────
@@ -1271,17 +1271,20 @@ class RoboEyeSenseApp:
             video_dir.mkdir(exist_ok=True)
             ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             path = str(video_dir / f"recording_{ts}.mp4")
+        actual_fps = self.camera.actual_fps
+        fps = float(actual_fps) if isinstance(actual_fps, (int, float)) and actual_fps > 0 else 30.0
         try:
             self._recorder = VideoRecorder(
                 path,
                 width=self.camera.actual_width,
                 height=self.camera.actual_height,
-                fps=self.camera.actual_fps or 30.0,
+                fps=fps,
             )
             self._recorder.start()
             self._record_btn.config(text="Stop recording")
             self._record_status_var.set(f"Recording: {path}")
         except RuntimeError as exc:
+            self._recorder = None
             self._record_status_var.set(f"Error: {exc}")
 
     def _stop_recording(self) -> None:
