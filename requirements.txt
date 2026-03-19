@@ -17,3 +17,6 @@ pyzbar>=0.1.9
 
 # YAML configuration file support
 pyyaml>=5.0
+
+# Optional: interactive 3-D SLAM visualisation (matplotlib backend)
+# matplotlib>=3.5.0
