@@ -46,7 +46,27 @@ def _fix_qt_font_dir() -> None:
             return
 
 
+def _fix_qt_platform() -> None:
+    """Force xcb QPA when running in a Wayland session.
+
+    ``opencv-python`` bundles its own Qt plug-in directory which typically
+    ships only the ``xcb`` plugin.  On a Wayland desktop, Qt picks up the
+    ``WAYLAND_DISPLAY`` environment variable and tries the wayland plugin
+    first, printing::
+
+        qt.qpa.plugin: Could not find the Qt platform plugin "wayland"
+
+    Setting :envvar:`QT_QPA_PLATFORM` to ``xcb`` before ``cv2`` initialises
+    the Qt back-end prevents the lookup and silences the warning.
+    """
+    if "QT_QPA_PLATFORM" in os.environ:
+        return
+    if "WAYLAND_DISPLAY" in os.environ:
+        os.environ["QT_QPA_PLATFORM"] = "xcb"
+
+
 _fix_qt_font_dir()
+_fix_qt_platform()
 
 if TYPE_CHECKING:
     from .auto_scenario import AutoFollowResult, AutoFollowScenario

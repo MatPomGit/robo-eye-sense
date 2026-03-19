@@ -57,3 +57,58 @@ class TestQtFontDirFix:
 
             if os.path.isdir("/usr/share/fonts") or os.path.isdir("/usr/local/share/fonts"):
                 assert "QT_QPA_FONTDIR" in os.environ
+
+
+class TestQtPlatformFix:
+    """Verify _fix_qt_platform sets QT_QPA_PLATFORM correctly on Wayland."""
+
+    def test_sets_xcb_on_wayland(self):
+        """When WAYLAND_DISPLAY is set and QT_QPA_PLATFORM is not, force xcb."""
+        env = os.environ.copy()
+        env.pop("QT_QPA_PLATFORM", None)
+        env["WAYLAND_DISPLAY"] = "wayland-0"
+
+        with patch.dict(os.environ, env, clear=True):
+            from robo_vision import _fix_qt_platform
+
+            _fix_qt_platform()
+
+            assert os.environ.get("QT_QPA_PLATFORM") == "xcb"
+
+    def test_noop_on_non_wayland(self):
+        """When WAYLAND_DISPLAY is not set, QT_QPA_PLATFORM must not be set."""
+        env = os.environ.copy()
+        env.pop("QT_QPA_PLATFORM", None)
+        env.pop("WAYLAND_DISPLAY", None)
+
+        with patch.dict(os.environ, env, clear=True):
+            from robo_vision import _fix_qt_platform
+
+            _fix_qt_platform()
+
+            assert "QT_QPA_PLATFORM" not in os.environ
+
+    def test_respects_existing_platform(self):
+        """If QT_QPA_PLATFORM is already set, _fix_qt_platform must not override it."""
+        env = os.environ.copy()
+        env["QT_QPA_PLATFORM"] = "wayland"
+        env["WAYLAND_DISPLAY"] = "wayland-0"
+
+        with patch.dict(os.environ, env):
+            from robo_vision import _fix_qt_platform
+
+            _fix_qt_platform()
+
+            assert os.environ["QT_QPA_PLATFORM"] == "wayland"
+
+    def test_package_import_sets_xcb_on_wayland(self):
+        """Importing robo_vision should set QT_QPA_PLATFORM on Wayland automatically."""
+        env = os.environ.copy()
+        env.pop("QT_QPA_PLATFORM", None)
+        env["WAYLAND_DISPLAY"] = "wayland-0"
+
+        with patch.dict(os.environ, env, clear=True):
+            # Force reimport to trigger _fix_qt_platform() call
+            importlib.reload(importlib.import_module("robo_vision"))
+
+            assert os.environ.get("QT_QPA_PLATFORM") == "xcb"
