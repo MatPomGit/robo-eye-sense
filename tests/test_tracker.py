@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from robo_eye_sense.results import Detection, DetectionType
-from robo_eye_sense.tracker import CentroidTracker
+from robo_vision.results import Detection, DetectionType
+from robo_vision.tracker import CentroidTracker
 
 
 def _laser(center, **kwargs):

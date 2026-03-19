@@ -2,7 +2,7 @@
 
 Dokument opisuje, w jaki sposób przeprowadzić automatyczną kalibrację za pomocą
 algorytmów SLAM (Simultaneous Localisation and Mapping) w systemie
-**robo-eye-sense** oraz jak zbudować i wykorzystać mapę markerów (ang. *marker
+**robo-vision** oraz jak zbudować i wykorzystać mapę markerów (ang. *marker
 map* / *tag map*), która definiuje położenie i orientację każdego markera
 w globalnym układzie współrzędnych, a także pozycję samego robota
 w trójwymiarowej przestrzeni.
@@ -57,7 +57,7 @@ fiducjalne — które mają trzy kluczowe zalety:
 | Znana geometria i rozmiar fizyczny | Dokładna estymacja pozy 6-DoF bez dodatkowej kalibracji skali |
 | Wysoka powtarzalność detekcji | Mniejsza liczba fałszywych dopasowań niż w przypadku cech naturalnych |
 
-System **robo-eye-sense** wykorzystuje bibliotekę `pupil-apriltags` do
+System **robo-vision** wykorzystuje bibliotekę `pupil-apriltags` do
 detekcji AprilTagów. Moduł `marker_map` rozszerza tę funkcjonalność o pełny
 pipeline SLAM-owy: budowanie mapy i lokalizację robota w 3-D.
 
@@ -65,7 +65,7 @@ pipeline SLAM-owy: budowanie mapy i lokalizację robota w 3-D.
 
 ## 2. Architektura modułu `marker_map`
 
-Moduł `robo_eye_sense/marker_map.py` składa się z następujących elementów:
+Moduł `robo_vision/marker_map.py` składa się z następujących elementów:
 
 ```
 marker_map.py
@@ -259,7 +259,7 @@ Gdy mapa markerów jest już zbudowana (lub wczytana z pliku JSON), można ją
 wykorzystać do **ciągłej lokalizacji robota** w czasie rzeczywistym:
 
 ```python
-from robo_eye_sense.marker_map import MarkerMap
+from robo_vision.marker_map import MarkerMap
 
 marker_map = MarkerMap.load("mapa.json")
 
@@ -375,7 +375,7 @@ lub wczytać programowo:
 
 ```bash
 python -c "
-from robo_eye_sense.marker_map import MarkerMap
+from robo_vision.marker_map import MarkerMap
 m = MarkerMap.load('mapa.json')
 print(f'Markers: {len(m)}')
 for mp in m.markers():
@@ -390,9 +390,9 @@ for mp in m.markers():
 ### 8.1. Budowanie mapy z kodu Python
 
 ```python
-from robo_eye_sense import RoboEyeDetector
-from robo_eye_sense.camera import Camera
-from robo_eye_sense.marker_map import SlamCalibrator
+from robo_vision import RoboEyeDetector
+from robo_vision.camera import Camera
+from robo_vision.marker_map import SlamCalibrator
 
 # Inicjalizacja
 detector = RoboEyeDetector(enable_apriltag=True)
@@ -426,9 +426,9 @@ print(f"Gotowe — {len(calibrator.marker_map)} markerów w mapie.")
 ### 8.2. Lokalizacja robota z istniejącą mapą
 
 ```python
-from robo_eye_sense import RoboEyeDetector
-from robo_eye_sense.camera import Camera
-from robo_eye_sense.marker_map import MarkerMap
+from robo_vision import RoboEyeDetector
+from robo_vision.camera import Camera
+from robo_vision.marker_map import MarkerMap
 
 # Wczytaj wcześniej zbudowaną mapę
 marker_map = MarkerMap.load("mapa.json")
@@ -531,7 +531,7 @@ calibrator = SlamCalibrator(tag_size_cm=5.0, camera_matrix=cam_mtx)
 
 ## 11. Podsumowanie
 
-Moduł `marker_map` w systemie **robo-eye-sense** dostarcza praktyczne
+Moduł `marker_map` w systemie **robo-vision** dostarcza praktyczne
 narzędzia do:
 
 - **automatycznego budowania mapy markerów** — `SlamCalibrator` analizuje

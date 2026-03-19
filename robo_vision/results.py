@@ -61,7 +61,7 @@ class Detection:
         Ordered corner points of the bounding polygon (may be empty for
         laser spots, which use the bounding-rect corners).
     track_id:
-        Persistent ID assigned by the :class:`~robo_eye_sense.tracker.CentroidTracker`.
+        Persistent ID assigned by the :class:`~robo_vision.tracker.CentroidTracker`.
         ``None`` until the detection has been through a tracker update.
     confidence:
         Detection confidence score in the range ``[0.0, 1.0]``.

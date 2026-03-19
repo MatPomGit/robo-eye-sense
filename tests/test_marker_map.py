@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from robo_eye_sense.marker_map import (
+from robo_vision.marker_map import (
     MarkerMap,
     MarkerPose3D,
     RobotPose3D,
@@ -26,7 +26,7 @@ from robo_eye_sense.marker_map import (
     _mean_angles,
     _rotation_matrix_to_euler,
 )
-from robo_eye_sense.results import Detection, DetectionType
+from robo_vision.results import Detection, DetectionType
 
 
 # ---------------------------------------------------------------------------

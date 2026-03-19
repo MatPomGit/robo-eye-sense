@@ -13,8 +13,8 @@ cv2 = pytest.importorskip(
 )
 
 from main import _parse_args, _parse_tag_names
-from robo_eye_sense.laser_detector import LaserSpotDetector
-from robo_eye_sense.results import Detection, DetectionType
+from robo_vision.laser_detector import LaserSpotDetector
+from robo_vision.results import Detection, DetectionType
 
 
 # ---------------------------------------------------------------------------
@@ -52,7 +52,7 @@ class TestInfoCommand:
         _make_dummy_video(video)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main
@@ -74,7 +74,7 @@ class TestCameraGetInfo:
     def test_get_info_returns_dict(self, tmp_path):
         video = tmp_path / "black.mp4"
         _make_dummy_video(video, num_frames=1, size=64)
-        from robo_eye_sense.camera import Camera
+        from robo_vision.camera import Camera
 
         cam = Camera(source=str(video))
         info = cam.get_info()
@@ -89,7 +89,7 @@ class TestCameraGetInfo:
     def test_backend_name_property(self, tmp_path):
         video = tmp_path / "black.mp4"
         _make_dummy_video(video, num_frames=1, size=64)
-        from robo_eye_sense.camera import Camera
+        from robo_vision.camera import Camera
 
         cam = Camera(source=str(video))
         name = cam.backend_name
@@ -136,20 +136,20 @@ class TestDetectorTagNames:
     """RoboEyeDetector should enrich AprilTag identifiers with names."""
 
     def test_tag_names_property(self):
-        from robo_eye_sense.detector import RoboEyeDetector
+        from robo_vision.detector import RoboEyeDetector
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             d = RoboEyeDetector(tag_names={"1": "box", "2": "table"})
         assert d.tag_names == {"1": "box", "2": "table"}
 
     def test_tag_names_setter(self):
-        from robo_eye_sense.detector import RoboEyeDetector
+        from robo_vision.detector import RoboEyeDetector
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             d = RoboEyeDetector()
@@ -159,7 +159,7 @@ class TestDetectorTagNames:
 
     def test_tag_names_enriches_identifier(self):
         """When tag_names are set, AprilTag identifiers should include the name."""
-        from robo_eye_sense.detector import RoboEyeDetector
+        from robo_vision.detector import RoboEyeDetector
 
         mock_april = MagicMock()
         mock_april.detect.return_value = [
@@ -172,7 +172,7 @@ class TestDetectorTagNames:
         ]
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             d = RoboEyeDetector(
@@ -191,7 +191,7 @@ class TestDetectorTagNames:
 
     def test_tag_names_no_match(self):
         """When tag has no name, identifier should stay unchanged."""
-        from robo_eye_sense.detector import RoboEyeDetector
+        from robo_vision.detector import RoboEyeDetector
 
         mock_april = MagicMock()
         mock_april.detect.return_value = [
@@ -204,7 +204,7 @@ class TestDetectorTagNames:
         ]
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             d = RoboEyeDetector(
@@ -297,7 +297,7 @@ class TestHeadlessOffsetRecapture:
         _make_dummy_video(video, num_frames=3)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main
@@ -320,7 +320,7 @@ class TestHeadlessOffsetRecapture:
         _make_dummy_video(video, num_frames=2)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main
@@ -345,10 +345,10 @@ class TestDetectorEnableLaserMax:
     """RoboEyeDetector.enable_laser should accept brightness_threshold_max."""
 
     def test_enable_laser_with_max(self):
-        from robo_eye_sense.detector import RoboEyeDetector
+        from robo_vision.detector import RoboEyeDetector
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             d = RoboEyeDetector(enable_laser=False)
@@ -358,10 +358,10 @@ class TestDetectorEnableLaserMax:
         assert d.laser_detector.brightness_threshold_max == 200
 
     def test_constructor_with_max(self):
-        from robo_eye_sense.detector import RoboEyeDetector
+        from robo_vision.detector import RoboEyeDetector
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             d = RoboEyeDetector(

@@ -1,4 +1,4 @@
-"""Tests for :class:`~robo_eye_sense.recorder.VideoRecorder`."""
+"""Tests for :class:`~robo_vision.recorder.VideoRecorder`."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ cv2 = pytest.importorskip(
     "cv2", reason="OpenCV runtime dependencies are unavailable"
 )
 
-from robo_eye_sense.recorder import VideoRecorder
+from robo_vision.recorder import VideoRecorder
 
 
 # ---------------------------------------------------------------------------

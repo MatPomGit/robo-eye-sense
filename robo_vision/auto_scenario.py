@@ -127,16 +127,16 @@ def compute_follow_vector(
 class AutoFollowScenario:
     """Continuous auto-follow scenario.
 
-    Wraps a :class:`~robo_eye_sense.detector.RoboEyeDetector` and a
-    :class:`~robo_eye_sense.camera.Camera` to continuously compute the
+    Wraps a :class:`~robo_vision.detector.RoboEyeDetector` and a
+    :class:`~robo_vision.camera.Camera` to continuously compute the
     follow vector for a selected AprilTag marker.
 
     Parameters
     ----------
     camera:
-        An opened :class:`~robo_eye_sense.camera.Camera` instance.
+        An opened :class:`~robo_vision.camera.Camera` instance.
     detector:
-        A configured :class:`~robo_eye_sense.detector.RoboEyeDetector`
+        A configured :class:`~robo_vision.detector.RoboEyeDetector`
         instance (AprilTag detection must be enabled).
     frame_width:
         Width of the captured frame in pixels.

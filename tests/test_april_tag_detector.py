@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from robo_eye_sense.results import DetectionType
+from robo_vision.results import DetectionType
 
 
 def _make_raw_result(tag_id=0, center=(100, 100), decision_margin=50.0):
@@ -34,10 +34,10 @@ class TestAprilTagDecisionMarginFiltering:
     def _ensure_apriltags_available(self):
         """Patch the availability check so the detector can be instantiated."""
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=True,
         ), patch(
-            "robo_eye_sense.april_tag_detector.importlib.util.find_spec",
+            "robo_vision.april_tag_detector.importlib.util.find_spec",
             return_value=True,
         ):
             yield
@@ -51,7 +51,7 @@ class TestAprilTagDecisionMarginFiltering:
         with patch.dict(
             "sys.modules", {"pupil_apriltags": mock_apriltag_module}
         ):
-            from robo_eye_sense.april_tag_detector import AprilTagDetector
+            from robo_vision.april_tag_detector import AprilTagDetector
 
             det = AprilTagDetector(min_decision_margin=min_decision_margin)
         return det, mock_detector_instance
@@ -126,40 +126,40 @@ class TestDefaultsDisabledModes:
 
     def test_qr_disabled_by_default(self):
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
-            from robo_eye_sense.detector import RoboEyeDetector
+            from robo_vision.detector import RoboEyeDetector
 
             det = RoboEyeDetector()
         assert det._qr_detector is None
 
     def test_laser_disabled_by_default(self):
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
-            from robo_eye_sense.detector import RoboEyeDetector
+            from robo_vision.detector import RoboEyeDetector
 
             det = RoboEyeDetector()
         assert det._laser_detector is None
 
     def test_qr_enabled_explicitly(self):
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
-            from robo_eye_sense.detector import RoboEyeDetector
+            from robo_vision.detector import RoboEyeDetector
 
             det = RoboEyeDetector(enable_qr=True)
         assert det._qr_detector is not None
 
     def test_laser_enabled_explicitly(self):
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
-            from robo_eye_sense.detector import RoboEyeDetector
+            from robo_vision.detector import RoboEyeDetector
 
             det = RoboEyeDetector(enable_laser=True)
         assert det._laser_detector is not None

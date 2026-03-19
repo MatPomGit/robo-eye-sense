@@ -1,4 +1,4 @@
-"""Tests for the Qt font directory fix in robo_eye_sense."""
+"""Tests for the Qt font directory fix in robo_vision."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ class TestQtFontDirFix:
         env.pop("QT_QPA_FONTDIR", None)
 
         with patch.dict(os.environ, env, clear=True):
-            from robo_eye_sense import _fix_qt_font_dir
+            from robo_vision import _fix_qt_font_dir
 
             _fix_qt_font_dir()
 
@@ -29,7 +29,7 @@ class TestQtFontDirFix:
     def test_respects_existing_envvar(self):
         """If QT_QPA_FONTDIR is already set, _fix_qt_font_dir must not override it."""
         with patch.dict(os.environ, {"QT_QPA_FONTDIR": "/custom/fonts"}):
-            from robo_eye_sense import _fix_qt_font_dir
+            from robo_vision import _fix_qt_font_dir
 
             _fix_qt_font_dir()
             assert os.environ["QT_QPA_FONTDIR"] == "/custom/fonts"
@@ -41,19 +41,19 @@ class TestQtFontDirFix:
 
         with patch.dict(os.environ, env, clear=True), \
              patch("os.path.isdir", return_value=False):
-            from robo_eye_sense import _fix_qt_font_dir
+            from robo_vision import _fix_qt_font_dir
 
             _fix_qt_font_dir()
             assert "QT_QPA_FONTDIR" not in os.environ
 
     def test_package_import_sets_fontdir(self):
-        """Importing robo_eye_sense should set QT_QPA_FONTDIR automatically."""
+        """Importing robo_vision should set QT_QPA_FONTDIR automatically."""
         env = os.environ.copy()
         env.pop("QT_QPA_FONTDIR", None)
 
         with patch.dict(os.environ, env, clear=True):
             # Force reimport to trigger _fix_qt_font_dir() call
-            importlib.reload(importlib.import_module("robo_eye_sense"))
+            importlib.reload(importlib.import_module("robo_vision"))
 
             if os.path.isdir("/usr/share/fonts") or os.path.isdir("/usr/local/share/fonts"):
                 assert "QT_QPA_FONTDIR" in os.environ

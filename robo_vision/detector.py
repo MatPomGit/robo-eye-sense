@@ -5,7 +5,7 @@ pipeline that also runs the centroid tracker.  Designed for continuous
 use in a ``while True`` video loop.
 
 Three operating modes are supported (see
-:class:`~robo_eye_sense.results.DetectionMode`):
+:class:`~robo_vision.results.DetectionMode`):
 
 * **NORMAL** – default balanced mode (original behaviour).
 * **FAST** – input frame downscaled 50 % before detection so that all
@@ -147,7 +147,7 @@ class RoboEyeDetector:
     enable_laser:
         Enable laser-spot detection.
     mode:
-        Operating mode.  See :class:`~robo_eye_sense.results.DetectionMode`
+        Operating mode.  See :class:`~robo_vision.results.DetectionMode`
         for a description of each mode.
     laser_brightness_threshold:
         Pixel brightness threshold for laser-spot detection (0-255).

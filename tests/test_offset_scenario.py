@@ -1,8 +1,8 @@
 """Tests for the camera-offset calibration scenario.
 
 The tests verify the pure computation logic in
-:func:`~robo_eye_sense.offset_scenario.compute_offset` and the
-:class:`~robo_eye_sense.offset_scenario.CameraOffsetScenario` wrapper
+:func:`~robo_vision.offset_scenario.compute_offset` and the
+:class:`~robo_vision.offset_scenario.CameraOffsetScenario` wrapper
 using synthetic detections (no real camera or AprilTag images required).
 """
 
@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from robo_eye_sense.offset_scenario import (
+from robo_vision.offset_scenario import (
     CameraOffsetScenario,
     OffsetResult,
     TAG_PHYSICAL_SIZE_CM,
@@ -22,7 +22,7 @@ from robo_eye_sense.offset_scenario import (
     estimate_focal_length_px,
     estimate_tag_distance_cm,
 )
-from robo_eye_sense.results import Detection, DetectionType
+from robo_vision.results import Detection, DetectionType
 
 
 # ---------------------------------------------------------------------------
@@ -297,7 +297,7 @@ class TestCLIScenarioOffset:
         with (
             patch("builtins.input", return_value=""),
             patch(
-                "robo_eye_sense.april_tag_detector._apriltags_available",
+                "robo_vision.april_tag_detector._apriltags_available",
                 return_value=False,
             ),
         ):

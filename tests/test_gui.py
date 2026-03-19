@@ -21,12 +21,12 @@ import pytest
 
 pytest.importorskip("cv2", reason="OpenCV runtime dependencies are unavailable", exc_type=ImportError)
 
-from robo_eye_sense.detector import (
+from robo_vision.detector import (
     RoboEyeDetector,
     _compute_orientation,
     _draw_axes,
 )
-from robo_eye_sense.results import Detection, DetectionType
+from robo_vision.results import Detection, DetectionType
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -116,7 +116,7 @@ class TestDrawDetectionsEnhanced:
     @pytest.fixture
     def detector(self):
         with patch(
-            "robo_eye_sense.detector._apriltags_available",
+            "robo_vision.detector._apriltags_available",
             return_value=False,
         ):
             return RoboEyeDetector(enable_qr=False, enable_laser=False)
@@ -188,7 +188,7 @@ class TestRoboEyeSenseApp:
         cam.actual_height = 480
 
         with patch(
-            "robo_eye_sense.detector._apriltags_available",
+            "robo_vision.detector._apriltags_available",
             return_value=False,
         ):
             detector = RoboEyeDetector(enable_qr=False, enable_laser=True)
@@ -196,7 +196,7 @@ class TestRoboEyeSenseApp:
         root = tk.Tk()
         root.withdraw()  # hide window during tests
 
-        from robo_eye_sense.gui import RoboEyeSenseApp
+        from robo_vision.gui import RoboEyeSenseApp
 
         app = RoboEyeSenseApp(root, cam, detector)
         yield app
@@ -294,24 +294,24 @@ class TestRoboEyeSenseApp:
         assert app._running is False
 
     def test_initial_mode_is_normal(self, app):
-        from robo_eye_sense.results import DetectionMode
+        from robo_vision.results import DetectionMode
         assert app.detector.mode == DetectionMode.NORMAL
 
     def test_quality_change_to_low(self, app):
-        from robo_eye_sense.results import DetectionMode
+        from robo_vision.results import DetectionMode
         app._quality_var.set("Low")
         app._on_quality_change()
         assert app.detector.mode == DetectionMode.FAST
 
     def test_quality_change_to_high(self, app):
-        from robo_eye_sense.results import DetectionMode
+        from robo_vision.results import DetectionMode
         app._quality_var.set("High")
         app._on_quality_change()
         assert app.detector.mode == DetectionMode.ROBUST
         assert app.detector._tracker.use_kalman is True
 
     def test_quality_change_back_to_normal(self, app):
-        from robo_eye_sense.results import DetectionMode
+        from robo_vision.results import DetectionMode
         app._quality_var.set("High")
         app._on_quality_change()
         app._quality_var.set("Normal")
@@ -338,7 +338,7 @@ class TestRoboEyeSenseApp:
 
     def test_set_quality_helper(self, app):
         """_set_quality() should update combobox, detector, and UI labels."""
-        from robo_eye_sense.results import DetectionMode
+        from robo_vision.results import DetectionMode
 
         app._set_quality(DetectionMode.ROBUST)
         assert app.detector.mode == DetectionMode.ROBUST
@@ -348,7 +348,7 @@ class TestRoboEyeSenseApp:
 
     def test_keyboard_shortcut_switches_quality(self, app):
         """Ctrl+1/2/3 key bindings should switch detector quality."""
-        from robo_eye_sense.results import DetectionMode
+        from robo_vision.results import DetectionMode
 
         # event_generate requires a visible, focused window
         app.root.deiconify()
@@ -395,7 +395,7 @@ class TestRoboEyeSenseApp:
         app._mode_var.set("Offset")
         app._on_mode_change()
         # Simulate some detections being available
-        from robo_eye_sense.results import Detection, DetectionType
+        from robo_vision.results import Detection, DetectionType
         app._last_detections = [
             Detection(
                 detection_type=DetectionType.APRIL_TAG,
@@ -566,8 +566,8 @@ class TestRender3dScene:
         pytest.importorskip("tkinter")
 
     def test_returns_pil_image(self):
-        from robo_eye_sense.gui import render_3d_scene
-        from robo_eye_sense.marker_map import MarkerPose3D, RobotPose3D
+        from robo_vision.gui import render_3d_scene
+        from robo_vision.marker_map import MarkerPose3D, RobotPose3D
 
         img = render_3d_scene(200, 200, [], RobotPose3D())
         from PIL import Image as PILImage
@@ -575,8 +575,8 @@ class TestRender3dScene:
         assert img.size == (200, 200)
 
     def test_with_markers_and_robot(self):
-        from robo_eye_sense.gui import render_3d_scene
-        from robo_eye_sense.marker_map import MarkerPose3D, RobotPose3D
+        from robo_vision.gui import render_3d_scene
+        from robo_vision.marker_map import MarkerPose3D, RobotPose3D
 
         markers = [
             MarkerPose3D(marker_id="1", position=(10.0, 0.0, 20.0)),
@@ -591,8 +591,8 @@ class TestRender3dScene:
         assert img.size == (200, 200)
 
     def test_single_marker_no_robot(self):
-        from robo_eye_sense.gui import render_3d_scene
-        from robo_eye_sense.marker_map import MarkerPose3D, RobotPose3D
+        from robo_vision.gui import render_3d_scene
+        from robo_vision.marker_map import MarkerPose3D, RobotPose3D
 
         markers = [MarkerPose3D(marker_id="42", position=(0.0, 0.0, 0.0))]
         robot = RobotPose3D()

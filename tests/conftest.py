@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for robo-eye-sense tests."""
+"""Shared pytest fixtures for robo-vision tests."""
 
 from __future__ import annotations
 

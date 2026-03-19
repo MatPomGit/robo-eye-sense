@@ -2,7 +2,7 @@
 
 Lekkie wykrywanie wizualnych markerów w czasie rzeczywistym dla robotów mobilnych.
 
-**robo-eye-sense** łączy trzy uzupełniające się technologie detekcji —
+**robo-vision** łączy trzy uzupełniające się technologie detekcji —
 znaczniki fiducjalne AprilTag, kody QR oraz punkty lasera — w jeden,
 zunifikowany potok wykrywania. Każdemu wykrytemu obiektowi nadawane jest
 *stabilne ID śledzenia*, które utrzymuje się przez klatki, nawet przy krótkich
@@ -262,7 +262,7 @@ Przy każdym uruchomieniu program wyświetla podsumowanie aktywnej
 konfiguracji w terminalu:
 
 ```
-robo-eye-sense 0.4.0
+robo-vision 0.4.0
 Display mode      : display
 Detection mode    : normal
 Detectors enabled : AprilTag
@@ -384,7 +384,7 @@ python main.py --mode follow --follow-marker 3 --follow-box --target-distance 0.
 ## Architektura
 
 ```
-robo_eye_sense/
+robo_vision/
 ├── __init__.py            # Public surface: RoboEyeDetector, Detection, DetectionType,
 │                          #   DetectionMode, SlamCalibrator, MarkerMap, MarkerPose3D,
 │                          #   RobotPose3D, APP_NAME, __version__
@@ -450,8 +450,8 @@ RoboEyeDetector.process_frame(frame)
 
 ```python
 import cv2
-from robo_eye_sense import RoboEyeDetector
-from robo_eye_sense.camera import Camera
+from robo_vision import RoboEyeDetector
+from robo_vision.camera import Camera
 
 detector = RoboEyeDetector(
     enable_apriltag=True,
@@ -473,7 +473,7 @@ with Camera(source=0, width=640, height=480) as cam:
                   f"center={d.center} track={d.track_id}")
 
         annotated = detector.draw_detections(frame, detections)
-        cv2.imshow("robo-eye-sense", annotated)
+        cv2.imshow("robo-vision", annotated)
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
 
@@ -483,7 +483,7 @@ cv2.destroyAllWindows()
 ### Nagrywanie wideo
 
 ```python
-from robo_eye_sense.recorder import VideoRecorder
+from robo_vision.recorder import VideoRecorder
 
 with VideoRecorder("output.mp4", width=640, height=480, fps=30.0) as rec:
     for frame in frames:
@@ -493,7 +493,7 @@ with VideoRecorder("output.mp4", width=640, height=480, fps=30.0) as rec:
 ### Kalibracja Offset z estymacją odległości
 
 ```python
-from robo_eye_sense.offset_scenario import compute_offset
+from robo_vision.offset_scenario import compute_offset
 
 result = compute_offset(reference_detections, current_detections,
                         frame_width=640, tag_size_cm=5.0)
@@ -507,9 +507,9 @@ for tag_id, dist in result.per_tag_distances_cm.items():
 ### SLAM – budowanie mapy i lokalizacja
 
 ```python
-from robo_eye_sense import RoboEyeDetector
-from robo_eye_sense.camera import Camera
-from robo_eye_sense.marker_map import SlamCalibrator, MarkerMap
+from robo_vision import RoboEyeDetector
+from robo_vision.camera import Camera
+from robo_vision.marker_map import SlamCalibrator, MarkerMap
 
 detector = RoboEyeDetector(enable_apriltag=True)
 calibrator = SlamCalibrator(tag_size_cm=5.0)

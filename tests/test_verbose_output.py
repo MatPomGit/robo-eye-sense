@@ -98,7 +98,7 @@ class TestLaserThresholdCLI:
         _make_dummy_video(video, num_frames=1)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main
@@ -127,7 +127,7 @@ class TestStartupConfigSummary:
         _make_dummy_video(video)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main
@@ -149,7 +149,7 @@ class TestStartupConfigSummary:
         _make_dummy_video(video)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main
@@ -164,7 +164,7 @@ class TestStartupConfigSummary:
         _make_dummy_video(video, num_frames=2)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main
@@ -192,7 +192,7 @@ class TestHeadlessDetectionLoopOutput:
         _make_dummy_video(video, num_frames=3)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main
@@ -210,7 +210,7 @@ class TestHeadlessDetectionLoopOutput:
         _make_dummy_video(video, num_frames=1)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main
@@ -226,7 +226,7 @@ class TestHeadlessDetectionLoopOutput:
         _make_dummy_video(video, num_frames=2)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main
@@ -242,7 +242,7 @@ class TestHeadlessDetectionLoopOutput:
         _make_dummy_video(video, num_frames=1)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main
@@ -266,7 +266,7 @@ class TestOffsetScenarioVerboseOutput:
         _make_dummy_video(video, num_frames=2)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main
@@ -290,7 +290,7 @@ class TestOffsetScenarioVerboseOutput:
         with (
             patch("builtins.input", return_value=""),
             patch(
-                "robo_eye_sense.april_tag_detector._apriltags_available",
+                "robo_vision.april_tag_detector._apriltags_available",
                 return_value=False,
             ),
         ):
@@ -321,7 +321,7 @@ class TestSlamScenarioVerboseOutput:
         _make_dummy_video(video, num_frames=3)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main
@@ -357,7 +357,7 @@ class TestRecordingMessages:
         output_file = str(tmp_path / "out.mp4")
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main
@@ -386,7 +386,7 @@ class TestSlamHeadlessImprovedOutput:
         _make_dummy_video(video, num_frames=2)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main
@@ -406,7 +406,7 @@ class TestSlamHeadlessImprovedOutput:
         _make_dummy_video(video, num_frames=2)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main
@@ -426,7 +426,7 @@ class TestSlamHeadlessImprovedOutput:
         _make_dummy_video(video, num_frames=2)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main
@@ -458,7 +458,7 @@ class TestHeadlessDetectionFPS:
         _make_dummy_video(video, num_frames=1)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main

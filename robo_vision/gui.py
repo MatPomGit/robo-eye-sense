@@ -36,9 +36,9 @@ Keyboard shortcuts: Ctrl+1 → Low, Ctrl+2 → Normal, Ctrl+3 → High.
 Usage::
 
     import tkinter as tk
-    from robo_eye_sense.camera import Camera
-    from robo_eye_sense.detector import RoboEyeDetector
-    from robo_eye_sense.gui import RoboEyeSenseApp
+    from robo_vision.camera import Camera
+    from robo_vision.detector import RoboEyeDetector
+    from robo_vision.gui import RoboEyeSenseApp
 
     root = tk.Tk()
     cam = Camera()
@@ -224,9 +224,9 @@ class RoboEyeSenseApp:
     root:
         Tkinter root window (``tk.Tk()`` instance).
     camera:
-        Opened :class:`~robo_eye_sense.camera.Camera` instance.
+        Opened :class:`~robo_vision.camera.Camera` instance.
     detector:
-        Configured :class:`~robo_eye_sense.detector.RoboEyeDetector` instance.
+        Configured :class:`~robo_vision.detector.RoboEyeDetector` instance.
     """
 
     def __init__(

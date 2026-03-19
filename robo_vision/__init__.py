@@ -1,20 +1,20 @@
-"""robo-eye-sense – lightweight real-time visual marker detection.
+"""robo-vision – lightweight real-time visual marker detection.
 
 Primary public surface
 ----------------------
-* :class:`~robo_eye_sense.detector.RoboEyeDetector` – all-in-one detector/tracker
-* :class:`~robo_eye_sense.results.Detection` – per-detection data class
-* :class:`~robo_eye_sense.results.DetectionType` – detection-category enum
+* :class:`~robo_vision.detector.RoboEyeDetector` – all-in-one detector/tracker
+* :class:`~robo_vision.results.Detection` – per-detection data class
+* :class:`~robo_vision.results.DetectionType` – detection-category enum
   (``APRIL_TAG``, ``QR_CODE``, ``LASER_SPOT``)
-* :class:`~robo_eye_sense.results.DetectionMode` – pipeline operating mode
+* :class:`~robo_vision.results.DetectionMode` – pipeline operating mode
   (``NORMAL``, ``FAST``, ``ROBUST``)
-* :class:`~robo_eye_sense.camera.Camera` – camera capture helper (OpenCV-dependent)
+* :class:`~robo_vision.camera.Camera` – camera capture helper (OpenCV-dependent)
 
 Notes
 -----
-``RoboEyeDetector`` and :class:`~robo_eye_sense.camera.Camera` depend on OpenCV.
+``RoboEyeDetector`` and :class:`~robo_vision.camera.Camera` depend on OpenCV.
 ``RoboEyeDetector`` is imported lazily via :pep:`562` (module ``__getattr__``),
-which keeps lightweight modules (e.g. :mod:`robo_eye_sense.results`) usable
+which keeps lightweight modules (e.g. :mod:`robo_vision.results`) usable
 even when OpenCV is not installed or fails to initialise.
 """
 
@@ -71,15 +71,15 @@ __all__ = [
     "print_headless_guide",
     "__version__",
 ]
-APP_NAME = "robo-eye-sense"
+APP_NAME = "robo-vision"
 __version__ = "0.4.0"
 
 
 def __getattr__(name: str) -> Any:
     """Lazy-load heavy module attributes.
 
-    This avoids importing :mod:`cv2` from :mod:`robo_eye_sense.detector`
-    when callers only need data models from :mod:`robo_eye_sense.results`.
+    This avoids importing :mod:`cv2` from :mod:`robo_vision.detector`
+    when callers only need data models from :mod:`robo_vision.results`.
     """
     if name == "RoboEyeDetector":
         try:

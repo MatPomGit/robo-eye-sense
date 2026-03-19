@@ -1,6 +1,6 @@
 # Changelog
 
-Wszystkie istotne zmiany w projekcie **robo-eye-sense** są dokumentowane
+Wszystkie istotne zmiany w projekcie **robo-vision** są dokumentowane
 w tym pliku. Format jest oparty na
 [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/), a wersjonowanie
 stosuje [Semantic Versioning](https://semver.org/lang/pl/).
@@ -17,7 +17,7 @@ stosuje [Semantic Versioning](https://semver.org/lang/pl/).
   (estymacja pozy 6-DoF tagów AprilTag) i *follow* (śledzenie markera
   z generowaniem sygnałów sterowania).
 - **Numer wersji w tytule okna GUI** – okno główne Tkinter wyświetla
-  aktualną wersję w pasku tytułu (np. „robo-eye-sense v0.4.0").
+  aktualną wersję w pasku tytułu (np. „robo-vision v0.4.0").
 
 ### Poprawione
 

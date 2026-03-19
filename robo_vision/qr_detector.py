@@ -3,7 +3,7 @@
 Uses *pyzbar* when available (more robust, requires the ``libzbar0`` system
 library), otherwise falls back to OpenCV's built-in
 ``cv2.QRCodeDetector``.  Both backends produce identical
-:class:`~robo_eye_sense.results.Detection` objects and support detecting
+:class:`~robo_vision.results.Detection` objects and support detecting
 multiple QR codes in a single frame.
 """
 

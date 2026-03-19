@@ -133,7 +133,7 @@ class CentroidTracker:
         Parameters
         ----------
         detections:
-            List of :class:`~robo_eye_sense.results.Detection` objects from
+            List of :class:`~robo_vision.results.Detection` objects from
             the current frame.  The ``track_id`` attribute of each is set
             before returning.
 

@@ -332,6 +332,54 @@ class TestCLINewModes:
         args = _parse_args(["--target-distance", "1.0"])
         assert args.target_distance == pytest.approx(1.0)
 
+    def test_parse_mode_by_number_basic(self):
+        from main import _parse_args
+
+        args = _parse_args(["--mode", "1"])
+        assert args.mode == "basic"
+
+    def test_parse_mode_by_number_offset(self):
+        from main import _parse_args
+
+        args = _parse_args(["--mode", "2"])
+        assert args.mode == "offset"
+
+    def test_parse_mode_by_number_slam(self):
+        from main import _parse_args
+
+        args = _parse_args(["--mode", "3"])
+        assert args.mode == "slam"
+
+    def test_parse_mode_by_number_calibration(self):
+        from main import _parse_args
+
+        args = _parse_args(["--mode", "4"])
+        assert args.mode == "calibration"
+
+    def test_parse_mode_by_number_box(self):
+        from main import _parse_args
+
+        args = _parse_args(["--mode", "5"])
+        assert args.mode == "box"
+
+    def test_parse_mode_by_number_pose(self):
+        from main import _parse_args
+
+        args = _parse_args(["--mode", "6"])
+        assert args.mode == "pose"
+
+    def test_parse_mode_by_number_follow(self):
+        from main import _parse_args
+
+        args = _parse_args(["--mode", "7"])
+        assert args.mode == "follow"
+
+    def test_parse_mode_invalid_number(self):
+        from main import _parse_args
+
+        with pytest.raises(SystemExit):
+            _parse_args(["--mode", "8"])
+
 
 # ===========================================================================
 # Integration: headless runs with synthetic videos
@@ -346,7 +394,7 @@ class TestNewModeIntegration:
         _make_dummy_video(video)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main
@@ -365,7 +413,7 @@ class TestNewModeIntegration:
         _make_dummy_video(video)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main
@@ -384,7 +432,7 @@ class TestNewModeIntegration:
         _make_dummy_video(video)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main
@@ -403,7 +451,7 @@ class TestNewModeIntegration:
         _make_dummy_video(video)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main
@@ -422,7 +470,7 @@ class TestNewModeIntegration:
         _make_dummy_video(video)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main
@@ -440,7 +488,7 @@ class TestNewModeIntegration:
         _make_dummy_video(video)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main

@@ -1,4 +1,4 @@
-"""Comprehensive headless guide for robo-eye-sense.
+"""Comprehensive headless guide for robo-vision.
 
 Provides device status, camera discovery, calibration information,
 AprilTag classification, and tag-name loading from files — all designed
@@ -138,7 +138,7 @@ def discover_cameras(max_index: int = 5) -> List[Dict[str, Any]]:
     """Probe camera indices ``0 .. max_index-1`` and return available ones.
 
     Each entry in the returned list is a dict with ``index`` and the same
-    keys produced by :meth:`robo_eye_sense.camera.Camera.get_info`.
+    keys produced by :meth:`robo_vision.camera.Camera.get_info`.
 
     Parameters
     ----------

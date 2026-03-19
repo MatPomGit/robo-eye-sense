@@ -13,7 +13,7 @@ cv2 = pytest.importorskip(
     "cv2", reason="OpenCV runtime dependencies are unavailable"
 )
 
-from robo_eye_sense.headless_guide import (
+from robo_vision.headless_guide import (
     MOVABLE_ID_UPPER,
     PACKAGE_ID_RANGE,
     TABLE_ID_RANGE,
@@ -312,7 +312,7 @@ class TestCLIIntegration:
 
     def test_guide_prints_report_and_exits(self, capsys):
         with patch(
-            "robo_eye_sense.headless_guide.discover_cameras",
+            "robo_vision.headless_guide.discover_cameras",
             return_value=[],
         ):
             from main import main
@@ -332,7 +332,7 @@ class TestCLIIntegration:
         f.write_text(json.dumps({"6": "parcel"}))
 
         with patch(
-            "robo_eye_sense.headless_guide.discover_cameras",
+            "robo_vision.headless_guide.discover_cameras",
             return_value=[],
         ):
             from main import main
@@ -352,7 +352,7 @@ class TestCLIIntegration:
         f.write_text(json.dumps({"1": "from-file"}))
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main
@@ -371,7 +371,7 @@ class TestCLIIntegration:
         _make_dummy_video(video)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main

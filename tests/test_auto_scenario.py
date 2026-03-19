@@ -1,8 +1,8 @@
 """Tests for the auto-follow scenario.
 
 The tests verify the pure computation logic in
-:func:`~robo_eye_sense.auto_scenario.compute_follow_vector` and the
-:class:`~robo_eye_sense.auto_scenario.AutoFollowScenario` wrapper
+:func:`~robo_vision.auto_scenario.compute_follow_vector` and the
+:class:`~robo_vision.auto_scenario.AutoFollowScenario` wrapper
 using synthetic detections (no real camera or AprilTag images required).
 """
 
@@ -13,12 +13,12 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from robo_eye_sense.auto_scenario import (
+from robo_vision.auto_scenario import (
     AutoFollowResult,
     AutoFollowScenario,
     compute_follow_vector,
 )
-from robo_eye_sense.results import Detection, DetectionType
+from robo_vision.results import Detection, DetectionType
 
 
 # ---------------------------------------------------------------------------
@@ -332,7 +332,7 @@ class TestCLIScenarioFollow:
         writer.release()
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             from main import main

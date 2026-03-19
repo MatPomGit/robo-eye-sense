@@ -61,7 +61,7 @@ infrastruktury radiowej), kamera korzysta z informacji wizualnych, które
 mogą być zarówno celowo umieszczonymi znacznikami, jak i naturalnymi cechami
 otoczenia.
 
-System **robo-eye-sense** jest przykładem lekkiej biblioteki detekcji
+System **robo-vision** jest przykładem lekkiej biblioteki detekcji
 wizualnej przeznaczonej dla robotów mobilnych. Łączy detekcję AprilTagów
 (poprzez bibliotekę `pupil-apriltags`), kodów QR (biblioteka `pyzbar`) oraz
 punktów laserowych, umożliwiając śledzenie markerów w czasie rzeczywistym
@@ -112,7 +112,7 @@ błędów. Najpopularniejsze to:
 | **tag25h9** | 5 × 5 w ramce 9 × 9 | 35 | Mniejsza matryca, mniej ID, ale szybsza detekcja |
 | **tag16h5** | 4 × 4 w ramce 8 × 8 | 30 | Bardzo mała matryca, wykrywalna z daleka, lecz podatna na fałszywe detekcje |
 
-W systemie **robo-eye-sense** klasa `AprilTagDetector` wykrywa jednocześnie
+W systemie **robo-vision** klasa `AprilTagDetector` wykrywa jednocześnie
 cztery standardowe rodziny tagów (`tag36h11`, `tag25h9`, `tag16h5`,
 `tag12h10`). Aby wyeliminować fałszywe detekcje spowodowane szumem obrazu
 lub przypadkowymi wzorami, stosuje próg minimalnej pewności
@@ -172,7 +172,7 @@ Minimalna liczba markerów zależy od wymagań aplikacji:
 | Scenariusz | Minimalna liczba | Zalecana liczba | Uzasadnienie |
 |---|---|---|---|
 | **Wyznaczenie pozycji 6-DoF** (x, y, z + obroty) | 1 marker (znany rozmiar + kalibracja kamery) | 2–4 markery | Jeden marker wystarczy matematycznie, ale wiele markerów zmniejsza błąd |
-| **Korekcja przesunięcia (offset)** | 1 wspólny marker w obu klatkach | 3–5 markerów | Uśrednienie wektorów z wielu markerów tłumi szum (jak w `robo-eye-sense`) |
+| **Korekcja przesunięcia (offset)** | 1 wspólny marker w obu klatkach | 3–5 markerów | Uśrednienie wektorów z wielu markerów tłumi szum (jak w `robo-vision`) |
 | **Nawigacja w dużym pomieszczeniu** | Wystarczająco dużo, by ≥ 1 marker był widoczny z każdego miejsca | 1 marker na 2–3 m² widocznej powierzchni | Robot musi zawsze „widzieć" przynajmniej jeden znany punkt |
 | **Lokalizacja z redundancją** | 3+ markerów widocznych jednocześnie | 5–8 markerów | Pozwala wykryć i odrzucić błędne odczyty (outliers) |
 
@@ -368,7 +368,7 @@ W prostszych scenariuszach, gdy pełna pozycja 6-DoF nie jest wymagana,
 wystarczy obliczyć **wektor przesunięcia** (ang. *offset*) — różnicę
 między aktualną a oczekiwaną pozycją markera w obrazie.
 
-System **robo-eye-sense** realizuje to podejście w module
+System **robo-vision** realizuje to podejście w module
 `offset_scenario`. Algorytm:
 
 1. **Klatka referencyjna** — kamera w pozycji docelowej rejestruje obraz;
@@ -406,7 +406,7 @@ Gdzie:
 - **rozmiar_pozorny_w_pikselach** — średnia długość boków markera
   zmierzona w obrazie.
 
-System **robo-eye-sense** implementuje tę estymację w funkcjach
+System **robo-vision** implementuje tę estymację w funkcjach
 `estimate_focal_length_px()` i `estimate_tag_distance_cm()`, domyślnie
 przyjmując kąt widzenia kamery 60° i rozmiar taga 5 cm.
 
@@ -437,7 +437,7 @@ z kolejnych pozycji markerów można obliczać **pochodne czasowe**:
   prognozowania trajektorii.
 
 Te parametry są kluczowe w systemach śledzenia obiektów, takich jak
-`CentroidTracker` w **robo-eye-sense**, który przypisuje trwałe
+`CentroidTracker` w **robo-vision**, który przypisuje trwałe
 identyfikatory (track ID) wykrytym obiektom między kolejnymi klatkami.
 
 ---
@@ -463,7 +463,7 @@ Filtr Kalmana to matematyczne narzędzie, które łączy predykcję ruchu
 obiektu z pomiarami z kamery, aby uzyskać wygładzoną i dokładniejszą
 trajektorię.
 
-W **robo-eye-sense** klasa `CentroidTracker` oferuje opcjonalne
+W **robo-vision** klasa `CentroidTracker` oferuje opcjonalne
 śledzenie Kalmana (`use_kalman=True`) dla obiektów bez etykiet (np.
 punktów laserowych). Filtr pracuje z wektorem stanu
 `[x, y, vx, vy]` (pozycja + prędkość) i modelem stałej prędkości:
@@ -497,7 +497,7 @@ Strategia fuzji wielu markerów:
 
 | Metoda | Opis |
 |---|---|
-| **Średnia arytmetyczna** | Prosta i skuteczna — używana w `compute_offset()` w **robo-eye-sense** |
+| **Średnia arytmetyczna** | Prosta i skuteczna — używana w `compute_offset()` w **robo-vision** |
 | **Średnia ważona odległością** | Bliższe markery mają większy wpływ (mniejszy błąd perspektywy) |
 | **Odrzucanie outlierów** | Markery, których offset drastycznie odbiega od mediany, są ignorowane |
 | **Optymalizacja nieliniowa** | Minimalizacja błędu reprojection error dla wszystkich markerów jednocześnie (np. algorytm Levenberga-Marquardta) |
@@ -547,7 +547,7 @@ się różne techniki wstępnego przetwarzania:
 | **Equalizacja histogramu (CLAHE)** | Wyrównuje kontrast lokalny | Słabo oświetlone pomieszczenia |
 | **Skalowanie obrazu** (downscale) | Zmniejszenie rozdzielczości przyspiesza detekcję kosztem zasięgu | Systemy czasu rzeczywistego na słabych procesorach |
 
-W **robo-eye-sense** tryb ROBUST automatycznie włącza wyostrzanie
+W **robo-vision** tryb ROBUST automatycznie włącza wyostrzanie
 (unsharp mask) obrazu przed detekcją, natomiast tryb FAST zmniejsza
 rozdzielczość obrazu o połowę, aby przyspieszyć przetwarzanie.
 
@@ -563,7 +563,7 @@ przetwarzania:
 | **FAST** | Połowa (½) | Brak | Centroid | Wysoki | Niższa (mniejszy zasięg) |
 | **ROBUST** | Pełna | Unsharp mask | Kalman + centroid | Niski | Najwyższa |
 
-System **robo-eye-sense** oferuje te trzy tryby (enum `DetectionMode`)
+System **robo-vision** oferuje te trzy tryby (enum `DetectionMode`)
 przełączane dynamicznie w zależności od bieżących potrzeb robota.
 
 ---
@@ -608,7 +608,7 @@ pozycję i orientację 3D robota.
 6. **Dobór trybu pracy** (szybkość vs. dokładność) pozwala dopasować
    system do możliwości sprzętowych platformy robota.
 
-Systemy takie jak **robo-eye-sense** pokazują, że nawet stosunkowo
+Systemy takie jak **robo-vision** pokazują, że nawet stosunkowo
 prosty stos technologiczny (kamera + AprilTagi + filtr Kalmana) może
 zapewnić niezawodną nawigację w środowiskach wewnętrznych, o ile
 zachowane są dobre praktyki: kalibracja kamery, przemyślane rozmieszczenie

@@ -10,8 +10,8 @@ import pytest
 
 cv2 = pytest.importorskip("cv2", reason="OpenCV runtime dependencies are unavailable", exc_type=ImportError)
 
-import robo_eye_sense
-from robo_eye_sense import APP_NAME
+import robo_vision
+from robo_vision import APP_NAME
 from main import main
 
 
@@ -22,15 +22,15 @@ from main import main
 
 class TestPackageVersion:
     def test_version_attribute_exists(self):
-        assert hasattr(robo_eye_sense, "__version__")
+        assert hasattr(robo_vision, "__version__")
 
     def test_version_is_string(self):
-        assert isinstance(robo_eye_sense.__version__, str)
+        assert isinstance(robo_vision.__version__, str)
 
     def test_version_matches_semver(self):
         pattern = r"^\d+\.\d+\.\d+$"
-        assert re.match(pattern, robo_eye_sense.__version__), (
-            f"__version__ {robo_eye_sense.__version__!r} does not match semver"
+        assert re.match(pattern, robo_vision.__version__), (
+            f"__version__ {robo_vision.__version__!r} does not match semver"
         )
 
 
@@ -47,7 +47,7 @@ class TestCLIVersionFlag:
         captured = capsys.readouterr()
         output = captured.out + captured.err
         assert APP_NAME in output
-        assert robo_eye_sense.__version__ in output
+        assert robo_vision.__version__ in output
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +69,7 @@ class TestCLIStartupPrint:
         main(["--source", str(dummy_video), "--headless"])
         captured = capsys.readouterr()
         assert APP_NAME in captured.out
-        assert robo_eye_sense.__version__ in captured.out
+        assert robo_vision.__version__ in captured.out
 
 
 # ---------------------------------------------------------------------------
@@ -111,17 +111,17 @@ class TestGUIVersionDisplay:
         cam.actual_height = 480
 
         with patch(
-            "robo_eye_sense.detector._apriltags_available",
+            "robo_vision.detector._apriltags_available",
             return_value=False,
         ):
-            from robo_eye_sense.detector import RoboEyeDetector
+            from robo_vision.detector import RoboEyeDetector
 
             detector = RoboEyeDetector(enable_qr=False, enable_laser=False)
 
         root = tk.Tk()
         root.withdraw()
 
-        from robo_eye_sense.gui import RoboEyeSenseApp
+        from robo_vision.gui import RoboEyeSenseApp
 
         app = RoboEyeSenseApp(root, cam, detector)
         yield app
@@ -131,4 +131,4 @@ class TestGUIVersionDisplay:
         assert APP_NAME in app.root.title()
 
     def test_window_title_contains_version(self, app):
-        assert robo_eye_sense.__version__ in app.root.title()
+        assert robo_vision.__version__ in app.root.title()

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""CLI entry point for robo-eye-sense.
+"""CLI entry point for robo-vision.
 
-robo-eye-sense detects AprilTag fiducial markers, QR codes, and laser-pointer
+robo-vision detects AprilTag fiducial markers, QR codes, and laser-pointer
 spots in a live camera feed (or recorded video) and assigns each detected
 object a persistent track ID across frames.
 
@@ -62,11 +62,11 @@ import sys
 import time
 from pathlib import Path
 
-from robo_eye_sense import APP_NAME, RoboEyeDetector, __version__
-from robo_eye_sense.camera import Camera
-from robo_eye_sense.results import DetectionMode, DetectionType
+from robo_vision import APP_NAME, RoboEyeDetector, __version__
+from robo_vision.camera import Camera
+from robo_vision.results import DetectionMode, DetectionType
 
-import cv2  # noqa: E402  – imported after robo_eye_sense to apply Qt font fix
+import cv2  # noqa: E402  – imported after robo_vision to apply Qt font fix
 
 # Maps the --quality CLI value to the internal DetectionMode enum.
 _QUALITY_TO_DETECTION_MODE: dict[str, DetectionMode] = {
@@ -74,6 +74,22 @@ _QUALITY_TO_DETECTION_MODE: dict[str, DetectionMode] = {
     "normal": DetectionMode.NORMAL,
     "high": DetectionMode.ROBUST,
 }
+
+# Ordered list of operating mode names (index+1 maps to mode name).
+_MODES = ["basic", "offset", "slam", "calibration", "box", "pose", "follow"]
+
+
+def _resolve_mode(value: str) -> str:
+    """Convert a numeric mode selector (e.g. '1') to its string name.
+
+    Accepts either a mode name (e.g. 'basic') or a 1-based index
+    (e.g. '1' for 'basic', '2' for 'offset', …).
+    """
+    if value.isdigit():
+        idx = int(value) - 1
+        if 0 <= idx < len(_MODES):
+            return _MODES[idx]
+    return value
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -151,10 +167,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--mode",
-        choices=["basic", "offset", "slam", "calibration", "box", "pose", "follow"],
+        type=_resolve_mode,
+        choices=_MODES,
         default="basic",
         help=(
-            "Operating mode.  'basic' – normal detection loop (default); "
+            "Operating mode – use the name or its 1-based index "
+            "(1=basic, 2=offset, 3=slam, 4=calibration, 5=box, 6=pose, 7=follow).  "
+            "'basic' – normal detection loop (default); "
             "'offset' – capture a reference frame, then compute the camera "
             "displacement vector after the camera has been moved. "
             "'slam' – incrementally build a marker map from the camera feed, "
@@ -321,7 +340,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
 
     # Merge tag names from file (file entries take precedence over CLI).
     if args.tag_names_file:
-        from robo_eye_sense.headless_guide import load_tag_names_from_file
+        from robo_vision.headless_guide import load_tag_names_from_file
 
         if os.path.isfile(args.tag_names_file):
             try:
@@ -341,7 +360,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
 
     # ── Guide mode ────────────────────────────────────────────────────
     if args.guide:
-        from robo_eye_sense.headless_guide import print_headless_guide
+        from robo_vision.headless_guide import print_headless_guide
 
         report = print_headless_guide(
             calib_path=args.calib_output,
@@ -395,14 +414,14 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
 
     # ── Scenario mode ─────────────────────────────────────────────────────
     if args.mode == "offset":
-        from robo_eye_sense.offset_scenario import CameraOffsetScenario
+        from robo_vision.offset_scenario import CameraOffsetScenario
 
         scenario = CameraOffsetScenario(camera=cam, detector=detector)
 
         # Optional recording during scenario
         recorder = None
         if args.record:
-            from robo_eye_sense.recorder import VideoRecorder
+            from robo_vision.recorder import VideoRecorder
 
             recorder = VideoRecorder(
                 args.record,
@@ -573,7 +592,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
 
     # ── SLAM scenario mode ────────────────────────────────────────────────
     if args.mode == "slam":
-        from robo_eye_sense.marker_map import SlamCalibrator
+        from robo_vision.marker_map import SlamCalibrator
 
         # Convert tag size from metres (CLI default) to centimetres
         tag_size_cm = args.tag_size * 100.0
@@ -602,7 +621,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
 
         recorder = None
         if args.record:
-            from robo_eye_sense.recorder import VideoRecorder
+            from robo_vision.recorder import VideoRecorder
 
             recorder = VideoRecorder(
                 args.record,
@@ -789,7 +808,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
 
         recorder = None
         if args.record:
-            from robo_eye_sense.recorder import VideoRecorder
+            from robo_vision.recorder import VideoRecorder
 
             recorder = VideoRecorder(
                 args.record,
@@ -873,7 +892,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                 file=sys.stderr,
             )
             return 1
-        from robo_eye_sense.gui import RoboEyeSenseApp
+        from robo_vision.gui import RoboEyeSenseApp
 
         print("Launching GUI...")
         root = tk.Tk()
@@ -888,7 +907,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
     # ── Headless / cv2.imshow mode ────────────────────────────────────────
     recorder = None
     if args.record:
-        from robo_eye_sense.recorder import VideoRecorder
+        from robo_vision.recorder import VideoRecorder
 
         recorder = VideoRecorder(
             args.record,

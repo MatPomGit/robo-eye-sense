@@ -1,4 +1,4 @@
-"""Operational modes for robo-eye-sense.
+"""Operational modes for robo-vision.
 
 Each mode implements a common :class:`BaseMode` interface whose
 :meth:`~BaseMode.run` method processes a single video frame and returns

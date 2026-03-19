@@ -285,16 +285,16 @@ def compute_offset(
 class CameraOffsetScenario:
     """Interactive camera-offset calibration scenario.
 
-    Wraps a :class:`~robo_eye_sense.detector.RoboEyeDetector` and a
-    :class:`~robo_eye_sense.camera.Camera` to guide the user through
+    Wraps a :class:`~robo_vision.detector.RoboEyeDetector` and a
+    :class:`~robo_vision.camera.Camera` to guide the user through
     reference capture → camera movement → offset computation.
 
     Parameters
     ----------
     camera:
-        An opened :class:`~robo_eye_sense.camera.Camera` instance.
+        An opened :class:`~robo_vision.camera.Camera` instance.
     detector:
-        A configured :class:`~robo_eye_sense.detector.RoboEyeDetector`
+        A configured :class:`~robo_vision.detector.RoboEyeDetector`
         instance (AprilTag detection must be enabled).
     frame_width:
         Width of the captured frame in pixels (for focal-length estimation).

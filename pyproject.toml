@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "robo-eye-sense"
+name = "robo-vision"
 version = "0.4.0"
 description = "Lightweight real-time visual marker detection for mobile robots"
 readme = "README.md"
@@ -24,14 +24,14 @@ dev = [
 ]
 
 [project.scripts]
-robo-eye-sense = "main:main"
+robo-vision = "main:main"
 
 [tool.setuptools]
 py-modules = ["main"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["robo_eye_sense*"]
+include = ["robo_vision*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

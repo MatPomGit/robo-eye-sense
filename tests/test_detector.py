@@ -13,8 +13,8 @@ import pytest
 
 cv2 = pytest.importorskip("cv2", reason="OpenCV runtime dependencies are unavailable", exc_type=ImportError)
 
-from robo_eye_sense.detector import RoboEyeDetector
-from robo_eye_sense.results import Detection, DetectionMode, DetectionType
+from robo_vision.detector import RoboEyeDetector
+from robo_vision.results import Detection, DetectionMode, DetectionType
 
 
 @pytest.fixture
@@ -25,7 +25,7 @@ def blank_bgr():
 class TestRoboEyeDetectorInit:
     def test_creates_with_defaults(self):
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             detector = RoboEyeDetector()
@@ -35,7 +35,7 @@ class TestRoboEyeDetectorInit:
 
     def test_laser_disabled(self):
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             detector = RoboEyeDetector(enable_laser=False)
@@ -43,7 +43,7 @@ class TestRoboEyeDetectorInit:
 
     def test_qr_disabled(self):
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             detector = RoboEyeDetector(enable_qr=False)
@@ -54,7 +54,7 @@ class TestRoboEyeDetectorProcessFrame:
     def _detector_with_mocks(self, april_detections=None, qr_detections=None):
         """Return a RoboEyeDetector whose sub-detectors are replaced by mocks."""
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             d = RoboEyeDetector(enable_apriltag=False)
@@ -68,7 +68,7 @@ class TestRoboEyeDetectorProcessFrame:
 
     def test_process_black_frame_returns_list(self, blank_bgr):
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             detector = RoboEyeDetector()
@@ -80,7 +80,7 @@ class TestRoboEyeDetectorProcessFrame:
         cv2.circle(frame, (100, 100), 6, (255, 255, 255), -1)
 
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             detector = RoboEyeDetector(enable_qr=False, enable_laser=True)
@@ -105,7 +105,7 @@ class TestRoboEyeDetectorProcessFrame:
     def test_detections_tracked_consistently(self):
         """The same laser spot across two frames should get the same track_id."""
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             detector = RoboEyeDetector(enable_qr=False, enable_laser=True)
@@ -124,7 +124,7 @@ class TestRoboEyeDetectorProcessFrame:
 class TestRoboEyeDetectorDraw:
     def test_draw_returns_frame(self, blank_bgr):
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             detector = RoboEyeDetector()
@@ -135,7 +135,7 @@ class TestRoboEyeDetectorDraw:
         frame = np.zeros((200, 200, 3), dtype=np.uint8)
         cv2.circle(frame, (100, 100), 6, (255, 255, 255), -1)
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             detector = RoboEyeDetector(enable_qr=False, enable_laser=True)
@@ -154,7 +154,7 @@ class TestRoboEyeDetectorDraw:
             track_id=0,
         )
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             detector = RoboEyeDetector()
@@ -174,7 +174,7 @@ class TestFastMode:
     @staticmethod
     def _make_detector(**kwargs):
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             return RoboEyeDetector(mode=DetectionMode.FAST, enable_qr=False, enable_laser=True, **kwargs)
@@ -223,7 +223,7 @@ class TestFastMode:
     def test_normal_mode_honors_custom_tracker_params_on_init(self):
         """NORMAL mode should keep user-provided tracker limits at construction."""
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             d = RoboEyeDetector(
@@ -236,7 +236,7 @@ class TestFastMode:
 
     def test_mode_switch_normal_to_fast(self):
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             d = RoboEyeDetector(enable_qr=False)
@@ -263,7 +263,7 @@ class TestRobustMode:
     @staticmethod
     def _make_detector(**kwargs):
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             return RoboEyeDetector(mode=DetectionMode.ROBUST, enable_qr=False, enable_laser=True, **kwargs)
@@ -324,7 +324,7 @@ class TestRobustMode:
     def test_mode_switch_enables_kalman(self):
         """Switching from NORMAL to ROBUST must enable Kalman filtering."""
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             d = RoboEyeDetector(enable_qr=False)
@@ -356,7 +356,7 @@ class TestDetectorPublicAPI:
     @staticmethod
     def _make_detector(**kwargs):
         with patch(
-            "robo_eye_sense.april_tag_detector._apriltags_available",
+            "robo_vision.april_tag_detector._apriltags_available",
             return_value=False,
         ):
             return RoboEyeDetector(
@@ -431,7 +431,7 @@ class TestDetectorPublicAPI:
     def test_enable_april_returns_false_when_unavailable(self):
         d = self._make_detector()
         with patch(
-            "robo_eye_sense.detector._apriltags_available",
+            "robo_vision.detector._apriltags_available",
             return_value=False,
         ):
             result = d.enable_april()

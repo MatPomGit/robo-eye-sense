@@ -5,7 +5,7 @@ to an MP4 file.  Works in GUI, headless, and plain ``cv2.imshow`` modes.
 
 Usage::
 
-    from robo_eye_sense.recorder import VideoRecorder
+    from robo_vision.recorder import VideoRecorder
 
     rec = VideoRecorder("output.mp4", width=640, height=480, fps=30.0)
     rec.start()

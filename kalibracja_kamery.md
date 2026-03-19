@@ -1,6 +1,6 @@
 # Kalibracja kamery robota — kompletna instrukcja
 
-Dokument opisuje proces kalibracji kamery stosowanej w systemie **robo-eye-sense**.
+Dokument opisuje proces kalibracji kamery stosowanej w systemie **robo-vision**.
 Zawiera wyjaśnienie, dlaczego kalibracja jest konieczna, co oznaczają poszczególne
 wartości pliku kalibracyjnego, jak przeprowadzić kalibrację krok po kroku oraz kiedy
 należy ją powtórzyć.
@@ -14,7 +14,7 @@ należy ją powtórzyć.
 3. [Plik kalibracyjny — struktura i znaczenie wartości](#3-plik-kalibracyjny--struktura-i-znaczenie-wartości)
 4. [Przeprowadzenie kalibracji krok po kroku](#4-przeprowadzenie-kalibracji-krok-po-kroku)
 5. [Przykładowe skrypty kalibracyjne](#5-przykładowe-skrypty-kalibracyjne)
-6. [Wczytywanie kalibracji w robo-eye-sense](#6-wczytywanie-kalibracji-w-robo-eye-sense)
+6. [Wczytywanie kalibracji w robo-vision](#6-wczytywanie-kalibracji-w-robo-vision)
 7. [Jak często powtarzać kalibrację](#7-jak-często-powtarzać-kalibrację)
 8. [Typowe błędy i jak je uniknąć](#8-typowe-błędy-i-jak-je-uniknąć)
 
@@ -38,7 +38,7 @@ skompensować.
 
 Bez kalibracji współrzędne pikseli zwracane przez detektor nie odpowiadają
 rzeczywistym pozycjom w przestrzeni. To z kolei przekłada się bezpośrednio na
-obniżoną skuteczność wykrywania i śledzenia markerów przez **robo-eye-sense**.
+obniżoną skuteczność wykrywania i śledzenia markerów przez **robo-vision**.
 
 ---
 
@@ -96,7 +96,7 @@ Poniżej omówiono wszystkie standardowe pola.
 ### Przykładowy plik `calibration.yaml`
 
 ```yaml
-# Plik kalibracyjny kamery — robo-eye-sense
+# Plik kalibracyjny kamery — robo-vision
 # Wygenerowany: 2024-01-15  Kamera: USB-CAM-01  Rozdzielczość: 640x480
 
 image_width: 640
@@ -324,7 +324,7 @@ Zapisz parametry do pliku YAML lub JSON — format opisany w sekcji 3.
 
 import cv2
 from pathlib import Path
-from robo_eye_sense.camera import Camera
+from robo_vision.camera import Camera
 
 SAVE_DIR = Path("calibration_images")
 SAVE_DIR.mkdir(exist_ok=True)
@@ -456,20 +456,20 @@ print(f"  k1={D[0,0]:.4f}  k2={D[0,1]:.4f}  p1={D[0,2]:.4f}  p2={D[0,3]:.4f}")
 
 ---
 
-## 6. Wczytywanie kalibracji w robo-eye-sense
+## 6. Wczytywanie kalibracji w robo-vision
 
 Poniższy przykład pokazuje, jak załadować plik kalibracyjny i korzystać z niego
 podczas pracy z `RoboEyeDetector` — w szczególności do undistortion klatek przed
 detekcją oraz do obliczania pozy markera.
 
 ```python
-"""Przykład użycia kalibracji z detektorem robo-eye-sense."""
+"""Przykład użycia kalibracji z detektorem robo-vision."""
 
 import cv2
 import numpy as np
 import yaml
-from robo_eye_sense import RoboEyeDetector
-from robo_eye_sense.camera import Camera
+from robo_vision import RoboEyeDetector
+from robo_vision.camera import Camera
 
 
 def load_calibration(path: str) -> tuple[np.ndarray, np.ndarray]:
@@ -514,7 +514,7 @@ with Camera(source=0, width=640, height=480) as cam:
         for d in detections:
             print(f"{d.detection_type.value}: id={d.identifier} center={d.center}")
 
-        cv2.imshow("robo-eye-sense (skalibrowana)", annotated)
+        cv2.imshow("robo-vision (skalibrowana)", annotated)
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
 
@@ -579,5 +579,5 @@ sygnalizuje konieczność ponownej kalibracji.
 
 ---
 
-*Niniejszy dokument jest częścią projektu **robo-eye-sense**. Więcej informacji o
+*Niniejszy dokument jest częścią projektu **robo-vision**. Więcej informacji o
 samym systemie detekcji markerów znajdziesz w [README.md](README.md).*
