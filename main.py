@@ -64,6 +64,7 @@ import time
 from pathlib import Path
 
 from robo_vision import APP_NAME, RoboEyeDetector, __version__
+
 from robo_vision.camera import Camera
 from robo_vision.results import DetectionMode, DetectionType
 

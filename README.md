@@ -2,12 +2,7 @@
 
 Lekkie wykrywanie wizualnych markerów w czasie rzeczywistym dla robotów mobilnych.
 
-**robo-vision** łączy trzy uzupełniające się technologie detekcji —
-znaczniki fiducjalne AprilTag, kody QR oraz punkty lasera — w jeden,
-zunifikowany potok wykrywania. Każdemu wykrytemu obiektowi nadawane jest
-*stabilne ID śledzenia*, które utrzymuje się przez klatki, nawet przy krótkich
-zasłonięciach. System zawiera pełne GUI Tkinter do interaktywnego strojenia
-oraz bezgłowy interfejs CLI do wdrożeń na sprzęcie wbudowanym.
+**robo-vision** łączy trzy uzupełniające się technologie detekcji — znaczniki fiducjalne AprilTag, kody QR oraz punkty lasera — w jeden, zunifikowany potok wykrywania. Każdemu wykrytemu obiektowi nadawane jest *stabilne ID śledzenia*, które utrzymuje się przez klatki, nawet przy krótkich zasłonięciach. System zawiera pełne GUI Tkinter do interaktywnego strojenia oraz bezgłowy interfejs CLI do wdrożeń na sprzęcie wbudowanym.
 
 ## Funkcje
 
@@ -31,13 +26,7 @@ oraz bezgłowy interfejs CLI do wdrożeń na sprzęcie wbudowanym.
 | **Integracja ROS2** | Mostek ROS2 publikujący detekcje i pozę robota; obsługa konfiguracji przez topik |
 | **Podsumowanie konfiguracji** | Automatyczne wyświetlanie parametrów startowych w terminalu |
 
-Wszystkie detektory działają na każdej klatce, a ich wyniki są ujednolicane przez
-pojedynczy `CentroidTracker` przydzielający stabilne ID śledzenia. Obiekty
-oznaczone etykietą (AprilTags, kody QR) są dopasowywane według ich tożsamości
-semantycznej, dzięki czemu ten sam fizyczny marker zawsze zachowuje to samo ID,
-nawet po krótkim zasłonięciu. Obiekty bez etykiety (punkty lasera) są
-dopasowywane według odległości najbliższego centroidu, z opcjonalną predykcją
-filtru Kalmana w trybie ROBUST.
+Wszystkie detektory działają na każdej klatce, a ich wyniki są ujednolicane przez pojedynczy `CentroidTracker` przydzielający stabilne ID śledzenia. Obiekty oznaczone etykietą (AprilTags, kody QR) są dopasowywane według ich tożsamości semantycznej, dzięki czemu ten sam fizyczny marker zawsze zachowuje to samo ID, nawet po krótkim zasłonięciu. Obiekty bez etykiety (punkty lasera) są dopasowywane według odległości najbliższego centroidu, z opcjonalną predykcją filtru Kalmana w trybie ROBUST.
 
 ---
 
@@ -88,6 +77,7 @@ python main.py --gui
 ```
 
 W trybie GUI możesz:
+
 - Przełączać się między trybami detekcji Normal / Fast / Robust za pomocą listy
   rozwijanej (lub skrótów klawiszowych Ctrl+1 / Ctrl+2 / Ctrl+3).
 - Włączać i wyłączać poszczególne detektory (AprilTag, QR Code, Laser Spot).
@@ -406,6 +396,7 @@ python main.py --ros-status
 ```
 
 Wyświetla:
+
 - czy `rclpy` jest zainstalowane i dostępne,
 - nazwę węzła ROS2 (`robo_vision_bridge`),
 - listę topików publikowanych i subskrybowanych,
