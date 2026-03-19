@@ -11,6 +11,7 @@ from .base import BaseMode
 from .box_mode import BoxMode
 from .calibration_mode import CalibrationMode
 from .follow_mode import FollowMode
+from .live_mode import LiveMapMode, LiveMode
 from .pose_mode import PoseMode
 
 __all__ = [
@@ -18,5 +19,7 @@ __all__ = [
     "BoxMode",
     "CalibrationMode",
     "FollowMode",
+    "LiveMapMode",
+    "LiveMode",
     "PoseMode",
 ]

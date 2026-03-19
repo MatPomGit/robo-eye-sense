@@ -331,6 +331,63 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Disable the on-screen information overlay.",
     )
+    parser.add_argument(
+        "--live",
+        action="store_true",
+        help=(
+            "Display the live camera feed as ASCII art in the terminal, "
+            "refreshed every frame.  Detected AprilTag markers are "
+            "highlighted with distinct characters and ANSI colours."
+        ),
+    )
+    parser.add_argument(
+        "--live-map",
+        action="store_true",
+        help=(
+            "Display a 2-D top-down ASCII map of the space around the robot "
+            "in the terminal, refreshed every frame.  Each detected AprilTag "
+            "is shown at its estimated 3-D position with distance, angle, "
+            "direction vector, and rotation angle."
+        ),
+    )
+    parser.add_argument(
+        "--live-cols",
+        type=int,
+        default=80,
+        metavar="N",
+        help="Width (in characters) of the ASCII art output for --live mode.",
+    )
+    parser.add_argument(
+        "--live-rows",
+        type=int,
+        default=30,
+        metavar="N",
+        help="Height (in characters) of the ASCII art output for --live mode.",
+    )
+    parser.add_argument(
+        "--map-width",
+        type=int,
+        default=70,
+        metavar="N",
+        help="Width (in characters) of the map grid for --live-map mode.",
+    )
+    parser.add_argument(
+        "--map-height",
+        type=int,
+        default=35,
+        metavar="N",
+        help="Height (in characters) of the map grid for --live-map mode.",
+    )
+    parser.add_argument(
+        "--map-scale",
+        type=float,
+        default=15.0,
+        metavar="S",
+        help=(
+            "Characters per metre for the --live-map view.  "
+            "Larger values zoom in; smaller values zoom out."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -1106,6 +1163,104 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                 logger.info("Recording saved to %s", args.record)
             if not args.headless:
                 cv2.destroyAllWindows()
+        return 0
+
+    # ── Live ASCII-art modes (--live / --live-map) ────────────────────────
+    if args.live or args.live_map:
+        from modes.live_mode import LiveMapMode, LiveMode
+
+        if args.live_map:
+            live_mode = LiveMapMode(
+                tag_size=args.tag_size,
+                calibration_path=args.cal if os.path.isfile(args.cal) else None,
+                map_width=args.map_width,
+                map_height=args.map_height,
+                scale=args.map_scale,
+            )
+            mode_label = "live-map"
+        else:
+            live_mode = LiveMode(
+                tag_size=args.tag_size,
+                calibration_path=args.cal if os.path.isfile(args.cal) else None,
+                cols=args.live_cols,
+                rows=args.live_rows,
+            )
+            mode_label = "live"
+
+        recorder = None
+        if args.record:
+            from robo_vision.recorder import VideoRecorder
+
+            recorder = VideoRecorder(
+                args.record,
+                width=cam.actual_width,
+                height=cam.actual_height,
+                fps=cam.actual_fps or 30.0,
+            )
+
+        fps_counter = 0
+        fps_display = 0.0
+        t_fps = time.perf_counter()
+        frame_idx = 0
+
+        logger.info("Starting %s mode...", mode_label)
+        print("Press Ctrl+C to quit.", flush=True)
+
+        try:
+            with cam:
+                if recorder is not None:
+                    recorder.start()
+                    logger.info("Recording to %s", args.record)
+
+                while True:
+                    frame = cam.read()
+                    if frame is None:
+                        break
+
+                    frame_idx += 1
+
+                    # FPS calculation
+                    fps_counter += 1
+                    t_now = time.perf_counter()
+                    elapsed = t_now - t_fps
+                    if elapsed >= 1.0:
+                        fps_display = fps_counter / elapsed
+                        fps_counter = 0
+                        t_fps = t_now
+
+                    ctx = {
+                        "headless": True,
+                        "key": -1,
+                        "frame_idx": frame_idx,
+                        "fps": fps_display,
+                    }
+
+                    try:
+                        vis = live_mode.run(frame, ctx)
+                    except cv2.error as exc:
+                        logger.error(
+                            "OpenCV error in %s mode: %s", mode_label, exc
+                        )
+                        continue
+                    except (ValueError, TypeError) as exc:
+                        logger.error(
+                            "Error in %s mode: %s", mode_label, exc
+                        )
+                        continue
+
+                    if recorder is not None:
+                        recorder.write_frame(vis)
+
+                logger.info("Stream ended. Total frames: %d", frame_idx)
+        except KeyboardInterrupt:
+            logger.info("Interrupted by user.")
+        except RuntimeError as exc:
+            logger.error("%s", exc)
+            return 1
+        finally:
+            if recorder is not None:
+                recorder.stop()
+                logger.info("Recording saved to %s", args.record)
         return 0
 
     # ── GUI mode ──────────────────────────────────────────────────────────
