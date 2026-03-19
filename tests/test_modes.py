@@ -22,7 +22,7 @@ from modes.base import BaseMode
 from modes.box_mode import BoxDetection, BoxMode
 from modes.calibration_mode import CalibrationMode
 from modes.follow_mode import FollowMode, FollowResult
-from modes.pose_mode import PoseMode, _get_tag_corners_3d
+from modes.pose_mode import PoseMode, _get_tag_corners_3d, _sensitivity_params
 
 
 # ---------------------------------------------------------------------------
@@ -159,6 +159,42 @@ class TestPoseMode:
         mode = PoseMode(tag_size=0.10)
         assert mode._tag_size == 0.10
 
+    def test_init_sensitivity_default(self):
+        mode = PoseMode()
+        assert mode._sensitivity == 50
+
+    def test_init_sensitivity_custom(self):
+        mode = PoseMode(sensitivity=80)
+        assert mode._sensitivity == 80
+
+    def test_init_sensitivity_clamped_high(self):
+        mode = PoseMode(sensitivity=150)
+        assert mode._sensitivity == 100
+
+    def test_init_sensitivity_clamped_low(self):
+        mode = PoseMode(sensitivity=-10)
+        assert mode._sensitivity == 0
+
+    def test_sensitivity_100_accepts_all(self):
+        """High sensitivity: margin threshold is 0, frames required is 1."""
+        min_margin, req_frames = _sensitivity_params(100)
+        assert min_margin == 0.0
+        assert req_frames == 1
+
+    def test_sensitivity_0_strictest(self):
+        """Low sensitivity: margin threshold is maximum, many frames required."""
+        min_margin, req_frames = _sensitivity_params(0)
+        assert min_margin > 0.0
+        assert req_frames > 1
+
+    def test_sensitivity_50_intermediate(self):
+        """Mid sensitivity values are between the extremes."""
+        min_margin_0, req_0 = _sensitivity_params(0)
+        min_margin_100, req_100 = _sensitivity_params(100)
+        min_margin_50, req_50 = _sensitivity_params(50)
+        assert min_margin_100 <= min_margin_50 <= min_margin_0
+        assert req_100 <= req_50 <= req_0
+
     def test_tag_corners_3d(self):
         pts = _get_tag_corners_3d(0.1)
         assert pts.shape == (4, 3)
@@ -172,6 +208,88 @@ class TestPoseMode:
             frame = np.zeros((200, 200, 3), dtype=np.uint8)
             result = mode.run(frame, _make_context())
             assert result.shape == (200, 200, 3)
+
+    def test_steering_vector_zero_when_no_tags(self):
+        """steering_vector should be 0.0 when no tags are detected."""
+        mode = PoseMode()
+        # Use a MagicMock that returns empty detections so no native library
+        # is loaded and no segfault occurs in the test environment.
+        mock_detector = MagicMock()
+        mock_detector.detect.return_value = []
+        mode._detector = mock_detector
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        mode.run(frame, _make_context())
+        assert mode.steering_vector == 0.0
+
+    def test_steering_vector_range_with_external_detections(self):
+        """steering_vector stays in [-1, 1] for external detections."""
+        mode = PoseMode(sensitivity=100)  # accept on first frame
+        mode._consecutive_counts = {}
+
+        det = MagicMock()
+        # Place tag at x=0 (far left) on a 200 px wide frame
+        det.corners = [[0, 50], [0, 100], [50, 100], [50, 50]]
+        det.identifier = "1"
+
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        ctx = _make_context()
+        ctx["april_detections"] = [det]
+        mode.run(frame, ctx)
+        assert -1.0 <= mode.steering_vector <= 1.0
+
+    def test_steering_vector_negative_for_left_tag(self):
+        """A tag on the left half should produce a negative steering value."""
+        mode = PoseMode(sensitivity=100)
+
+        det = MagicMock()
+        # Corners centred around x=50 on a 200 px wide frame → left of centre
+        det.corners = [[25, 25], [75, 25], [75, 75], [25, 75]]
+        det.identifier = "1"
+
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        ctx = _make_context()
+        ctx["april_detections"] = [det]
+        mode.run(frame, ctx)
+        assert mode.steering_vector < 0.0
+
+    def test_steering_vector_positive_for_right_tag(self):
+        """A tag on the right half should produce a positive steering value."""
+        mode = PoseMode(sensitivity=100)
+
+        det = MagicMock()
+        # Corners centred around x=150 on a 200 px wide frame → right of centre
+        det.corners = [[125, 25], [175, 25], [175, 75], [125, 75]]
+        det.identifier = "1"
+
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        ctx = _make_context()
+        ctx["april_detections"] = [det]
+        mode.run(frame, ctx)
+        assert mode.steering_vector > 0.0
+
+    def test_consecutive_frames_filtering(self):
+        """Low sensitivity: tag not reported until seen for required frames."""
+        mode = PoseMode(sensitivity=0)  # strictest – requires many frames
+        req = mode._required_consecutive_frames
+        assert req > 1  # sanity check
+
+        det = MagicMock()
+        # Corners centred around x=50 on a 200 px wide frame (left of centre)
+        det.corners = [[25, 75], [75, 75], [75, 125], [25, 125]]
+        det.identifier = "42"
+
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        ctx = _make_context()
+        ctx["april_detections"] = [det]
+
+        # Run fewer frames than required → should not be qualified yet
+        for _ in range(req - 1):
+            mode.run(frame, ctx)
+        assert mode.steering_vector == 0.0
+
+        # One more frame → now it should qualify
+        mode.run(frame, ctx)
+        assert mode.steering_vector != 0.0
 
     def test_load_calibration_nonexistent_file(self):
         """Missing calibration file should produce a warning, not crash."""
@@ -379,6 +497,30 @@ class TestCLINewModes:
 
         with pytest.raises(SystemExit):
             _parse_args(["--mode", "8"])
+
+    def test_sensitivity_default(self):
+        from main import _parse_args
+
+        args = _parse_args([])
+        assert args.sensitivity == 50
+
+    def test_sensitivity_custom(self):
+        from main import _parse_args
+
+        args = _parse_args(["--sensitivity", "80"])
+        assert args.sensitivity == 80
+
+    def test_sensitivity_zero(self):
+        from main import _parse_args
+
+        args = _parse_args(["--sensitivity", "0"])
+        assert args.sensitivity == 0
+
+    def test_sensitivity_max(self):
+        from main import _parse_args
+
+        args = _parse_args(["--sensitivity", "100"])
+        assert args.sensitivity == 100
 
 
 # ===========================================================================

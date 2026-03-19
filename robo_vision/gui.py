@@ -320,6 +320,7 @@ class RoboEyeSenseApp:
         # Pose estimation mode state
         self._pose_mode_obj: Optional[Any] = None
         self._pose_active = False
+        self._pose_sensitivity_var = tk.IntVar(value=50)
 
         # Recording state
         self._recorder: Optional[VideoRecorder] = None
@@ -1077,6 +1078,30 @@ class RoboEyeSenseApp:
 
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
 
+        # Sensitivity slider
+        sens_frame = ttk.Frame(parent)
+        sens_frame.pack(fill="x", pady=(0, 4))
+        ttk.Label(sens_frame, text="Sensitivity (0–100)").pack(
+            side="left", anchor="w"
+        )
+        self._pose_sensitivity_label = ttk.Label(
+            sens_frame,
+            text=str(self._pose_sensitivity_var.get()),
+            width=4,
+            anchor="e",
+        )
+        self._pose_sensitivity_label.pack(side="right")
+        ttk.Scale(
+            parent,
+            from_=0,
+            to=100,
+            orient="horizontal",
+            variable=self._pose_sensitivity_var,
+            command=self._on_pose_sensitivity_change,
+        ).pack(fill="x", pady=(0, 4))
+
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
+
         self._pose_status_var = tk.StringVar(
             value="Pose mode not started.\nSelect 'Pose' mode to begin."
         )
@@ -1352,10 +1377,18 @@ class RoboEyeSenseApp:
             tag_size = float(self._pose_tag_size_var.get())
         except ValueError:
             tag_size = 0.05
-        self._pose_mode_obj = _PoseMode(tag_size=tag_size)
+        sensitivity = self._pose_sensitivity_var.get()
+        self._pose_mode_obj = _PoseMode(tag_size=tag_size, sensitivity=sensitivity)
         self._pose_active = True
         self._pose_status_var.set("Pose mode active.\nWaiting for AprilTags…")
         self._mode_notebook.select(self._pose_tab)
+
+    def _on_pose_sensitivity_change(self, _value: Optional[str] = None) -> None:
+        """Update the sensitivity label and restart pose mode if active."""
+        val = self._pose_sensitivity_var.get()
+        self._pose_sensitivity_label.config(text=str(val))
+        if self._pose_active:
+            self._start_pose_mode()
 
     def _on_calib_capture(self) -> None:
         """Request a chessboard-capture on the next frame."""

@@ -8,7 +8,7 @@ Visualises tag borders, IDs, and 3-D axes on the frame.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import cv2
 import numpy as np
@@ -19,6 +19,37 @@ logger = logging.getLogger(__name__)
 
 # All tag families supported by pupil_apriltags
 _ALL_FAMILIES = "tag36h11 tag25h9 tag16h5 tag12h10"
+
+# Sensitivity → detection parameter bounds
+_SENSITIVITY_MAX_MARGIN: float = 50.0   # decision_margin threshold at sensitivity=0
+_SENSITIVITY_MAX_FRAMES: int = 10       # consecutive frames required at sensitivity=0
+
+
+def _sensitivity_params(sensitivity: int) -> Tuple[float, int]:
+    """Convert *sensitivity* (0–100) to low-level detection thresholds.
+
+    Parameters
+    ----------
+    sensitivity:
+        Value in the range [0, 100].  Higher values make detection more
+        permissive; lower values make it stricter.
+
+    Returns
+    -------
+    (min_decision_margin, required_consecutive_frames)
+        min_decision_margin:
+            Minimum ``decision_margin`` a raw detection must have to be
+            accepted.  0.0 at sensitivity=100, up to
+            ``_SENSITIVITY_MAX_MARGIN`` at sensitivity=0.
+        required_consecutive_frames:
+            How many consecutive frames a tag must appear before it is
+            reported as detected.  1 at sensitivity=100, up to
+            ``_SENSITIVITY_MAX_FRAMES`` at sensitivity=0.
+    """
+    s = max(0, min(100, sensitivity)) / 100.0
+    min_margin = (1.0 - s) * _SENSITIVITY_MAX_MARGIN
+    req_frames = max(1, round(1 + (1.0 - s) * (_SENSITIVITY_MAX_FRAMES - 1)))
+    return min_margin, req_frames
 
 
 def _load_calibration(path: str) -> Tuple[np.ndarray, np.ndarray]:
@@ -86,17 +117,37 @@ class PoseMode(BaseMode):
     calibration_path:
         Path to the calibration ``.npz`` file.  When ``None`` a default
         camera matrix is synthesised from the frame dimensions.
+    sensitivity:
+        Detection sensitivity in the range [0, 100].
+
+        * **High values** (close to 100) – even weak AprilTag signals are
+          accepted as valid detections (low decision-margin threshold,
+          qualification on the very first frame).
+        * **Low values** (close to 0) – only strong signals qualify *and*
+          the tag must remain visible for several consecutive frames before
+          it is reported as detected.
     """
 
     def __init__(
         self,
         tag_size: float = 0.05,
         calibration_path: Optional[str] = None,
+        sensitivity: int = 50,
     ) -> None:
         self._tag_size = tag_size
         self._obj_pts = _get_tag_corners_3d(tag_size)
         self._camera_matrix: Optional[np.ndarray] = None
         self._dist_coeffs: Optional[np.ndarray] = None
+
+        # Sensitivity settings
+        self._sensitivity = max(0, min(100, sensitivity))
+        self._min_decision_margin, self._required_consecutive_frames = (
+            _sensitivity_params(self._sensitivity)
+        )
+        # Per-tag consecutive detection counters  (tag_id → frame count)
+        self._consecutive_counts: Dict[str, int] = {}
+        # Last computed horizontal steering value (normalised to [-1, 1])
+        self._steering_vector: float = 0.0
 
         if calibration_path is not None:
             try:
@@ -113,6 +164,23 @@ class PoseMode(BaseMode):
 
         # Lazy-load the AprilTag detector
         self._detector: Any = None
+
+    # ------------------------------------------------------------------
+    @property
+    def steering_vector(self) -> float:
+        """Horizontal steering signal for robot control, normalised to [-1, 1].
+
+        Derived from the position of the primary detected AprilTag relative
+        to the horizontal centre of the frame:
+
+        * **+1.0** – tag is at the far-right edge.
+        * **0.0**  – tag is centred (no correction needed), or no tag detected.
+        * **-1.0** – tag is at the far-left edge.
+
+        The value is updated on every call to :meth:`run`.  When no qualified
+        tag is present the property returns ``0.0``.
+        """
+        return self._steering_vector
 
     # ------------------------------------------------------------------
     def _ensure_detector(self) -> None:
@@ -164,6 +232,10 @@ class PoseMode(BaseMode):
         which already runs an AprilTag detector) those detections are reused,
         avoiding a redundant second detector instance.  Otherwise the mode
         initialises its own detector and runs detection internally.
+
+        The :attr:`steering_vector` property is updated on every call with
+        the horizontal offset of the first qualified tag, normalised to
+        [-1, 1].
         """
         h, w = frame.shape[:2]
         vis = frame.copy()
@@ -185,6 +257,8 @@ class PoseMode(BaseMode):
         using_own_detector = april_detections is None
 
         tags_data: List[Tuple[np.ndarray, Any]] = []
+        # Track which IDs were seen this frame (for consecutive-count reset)
+        detected_ids: Set[str] = set()
 
         if using_own_detector:
             self._ensure_detector()
@@ -195,6 +269,7 @@ class PoseMode(BaseMode):
                     (8, 48),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA,
                 )
+                self._steering_vector = 0.0
                 return vis
 
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -202,22 +277,62 @@ class PoseMode(BaseMode):
                 raw_tags = self._detector.detect(gray)
             except Exception:
                 logger.exception("AprilTag detection failed")
+                self._steering_vector = 0.0
                 return vis
 
             for tag in raw_tags:
                 corners = getattr(tag, "corners", None)
                 if corners is None:
                     continue
+                # Sensitivity: filter by decision_margin when available.
+                # float("inf") is the safe default: a detector that does not
+                # expose decision_margin is treated as maximally confident so
+                # that the margin filter is always satisfied regardless of the
+                # configured threshold.
+                margin = getattr(tag, "decision_margin", float("inf"))
+                if margin < self._min_decision_margin:
+                    continue
                 corners_2d = np.array(corners, dtype=np.float64).reshape(-1, 2)
                 tag_id = str(getattr(tag, "tag_id", "?"))
-                tags_data.append((corners_2d, tag_id))
+                detected_ids.add(tag_id)
+                self._consecutive_counts[tag_id] = (
+                    self._consecutive_counts.get(tag_id, 0) + 1
+                )
+                if (
+                    self._consecutive_counts[tag_id]
+                    >= self._required_consecutive_frames
+                ):
+                    tags_data.append((corners_2d, tag_id))
         else:
             # Use detections provided by the GUI's main detector
             for det in april_detections:
                 if not det.corners:
                     continue
                 corners_2d = np.array(det.corners, dtype=np.float64).reshape(-1, 2)
-                tags_data.append((corners_2d, det.identifier))
+                tag_id = str(det.identifier)
+                detected_ids.add(tag_id)
+                self._consecutive_counts[tag_id] = (
+                    self._consecutive_counts.get(tag_id, 0) + 1
+                )
+                if (
+                    self._consecutive_counts[tag_id]
+                    >= self._required_consecutive_frames
+                ):
+                    tags_data.append((corners_2d, tag_id))
+
+        # Reset counters for tags that were not detected this frame
+        for tid in tuple(self._consecutive_counts):
+            if tid not in detected_ids:
+                self._consecutive_counts[tid] = 0
+
+        # Compute horizontal steering from the first qualified tag
+        if tags_data:
+            first_corners, _ = tags_data[0]
+            tag_cx = float(first_corners[:, 0].mean())
+            half_w = w / 2.0
+            self._steering_vector = (tag_cx - half_w) / half_w if half_w > 0 else 0.0
+        else:
+            self._steering_vector = 0.0
 
         if not tags_data:
             cv2.putText(
@@ -275,7 +390,8 @@ class PoseMode(BaseMode):
                         f"[frame {frame_idx}] "
                         f"ID: {tag_id} | "
                         f"tvec: [{tv[0]:.4f}, {tv[1]:.4f}, {tv[2]:.4f}] | "
-                        f"rvec: [{rv[0]:.4f}, {rv[1]:.4f}, {rv[2]:.4f}]"
+                        f"rvec: [{rv[0]:.4f}, {rv[1]:.4f}, {rv[2]:.4f}] | "
+                        f"steering: {self._steering_vector:+.4f}"
                     )
 
         return vis

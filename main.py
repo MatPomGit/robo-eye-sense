@@ -252,6 +252,19 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Physical side length of AprilTags in metres (pose/follow modes).",
     )
     parser.add_argument(
+        "--sensitivity",
+        type=int,
+        default=50,
+        metavar="N",
+        help=(
+            "AprilTag detection sensitivity for pose mode (0–100). "
+            "High values (close to 100) accept even weak signals as valid "
+            "markers. "
+            "Low values (close to 0) require a strong signal that persists "
+            "over several consecutive frames before the marker is confirmed."
+        ),
+    )
+    parser.add_argument(
         "--info",
         action="store_true",
         help=(
@@ -995,6 +1008,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
             active_mode = PoseMode(
                 tag_size=args.tag_size,
                 calibration_path=args.cal,
+                sensitivity=args.sensitivity,
             )
         elif args.mode == "follow":
             active_mode = FollowMode(
