@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import List
+from typing import TYPE_CHECKING, List
 
-import numpy as np
+if TYPE_CHECKING:
+    import numpy as np
 
 from .results import Detection
 
