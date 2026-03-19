@@ -8,8 +8,8 @@ Layout (normal mode)
 |  Quality    |                           | ---------------- |
 |  [combo]    +---------------------------+ [Offset][SLAM]   |
 |  ---------- |  INFO / CAMERA / QUALITY  | [Follow][Calib]  |
-|  Detectors  |  App / FPS / Res          | (tabs, full col) |
-|  [x] April  |  Quality label            |                  |
+|  Detectors  |  App / FPS / Res          | [Box]  [Pose]    |
+|  [x] April  |  Quality label            | (tabs, full col) |
 |  [x] QR     |  Detected objects (5 rows)|                  |
 |  [x] Laser  |                           |                  |
 |  ---------- |                           |                  |
@@ -99,7 +99,7 @@ _QUALITY_DESCRIPTIONS: dict[DetectionMode, str] = {
 }
 
 # Available mode choices for the mode combobox
-_MODE_CHOICES: list[str] = ["Basic", "Offset", "SLAM", "Follow", "Calibration"]
+_MODE_CHOICES: list[str] = ["Basic", "Offset", "SLAM", "Follow", "Calibration", "Box", "Pose"]
 
 # Minimum number of chessboard captures before calibration can be run
 _CALIB_MIN_CAPTURES: int = 15
@@ -300,6 +300,14 @@ class RoboEyeSenseApp:
         self._calibration_active = False
         self._calib_capture_flag = False
         self._calib_run_flag = False
+
+        # Box detection mode state
+        self._box_mode_obj: Optional[Any] = None
+        self._box_active = False
+
+        # Pose estimation mode state
+        self._pose_mode_obj: Optional[Any] = None
+        self._pose_active = False
 
         # Recording state
         self._recorder: Optional[VideoRecorder] = None
@@ -679,6 +687,18 @@ class RoboEyeSenseApp:
         self._build_calibration_tab(calib_tab)
         self._calibration_tab = calib_tab
 
+        # ── Box tab ────────────────────────────────────────────────────────
+        box_tab = ttk.Frame(self._mode_notebook, padding=4)
+        self._mode_notebook.add(box_tab, text="Box")
+        self._build_box_tab(box_tab)
+        self._box_tab = box_tab
+
+        # ── Pose tab ──────────────────────────────────────────────────────
+        pose_tab = ttk.Frame(self._mode_notebook, padding=4)
+        self._mode_notebook.add(pose_tab, text="Pose")
+        self._build_pose_tab(pose_tab)
+        self._pose_tab = pose_tab
+
     def _build_offset_tab(self, parent: ttk.Frame) -> None:
         """Build the Offset mode tab contents."""
         # Controls
@@ -898,6 +918,58 @@ class RoboEyeSenseApp:
         ).pack(anchor="w")
 
 
+    def _build_box_tab(self, parent: ttk.Frame) -> None:
+        """Build the Box detection mode tab contents."""
+        ttk.Label(
+            parent,
+            text="Box / cuboid detection",
+            font=("", 9, "bold"),
+        ).pack(anchor="w", pady=(0, 4))
+
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
+
+        self._box_status_var = tk.StringVar(
+            value="Box mode not started.\nSelect 'Box' mode to begin."
+        )
+        ttk.Label(
+            parent,
+            textvariable=self._box_status_var,
+            font=("Courier", 8),
+            wraplength=260,
+            justify="left",
+        ).pack(anchor="w")
+
+    def _build_pose_tab(self, parent: ttk.Frame) -> None:
+        """Build the Pose estimation mode tab contents."""
+        ttk.Label(
+            parent,
+            text="AprilTag 6-DoF pose estimation",
+            font=("", 9, "bold"),
+        ).pack(anchor="w", pady=(0, 4))
+
+        # Tag size
+        size_frame = ttk.Frame(parent)
+        size_frame.pack(fill="x", pady=(0, 4))
+        ttk.Label(size_frame, text="Tag size (m):").pack(side="left")
+        self._pose_tag_size_var = tk.StringVar(value="0.05")
+        ttk.Entry(
+            size_frame, textvariable=self._pose_tag_size_var, width=6
+        ).pack(side="left", padx=(4, 0))
+
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
+
+        self._pose_status_var = tk.StringVar(
+            value="Pose mode not started.\nSelect 'Pose' mode to begin."
+        )
+        ttk.Label(
+            parent,
+            textvariable=self._pose_status_var,
+            font=("Courier", 8),
+            wraplength=260,
+            justify="left",
+        ).pack(anchor="w")
+
+
     def _set_quality(self, mode: DetectionMode) -> None:
         """Programmatically switch to quality *mode* and update all UI elements."""
         label = _QUALITY_DISPLAY_INV.get(mode, "Normal")
@@ -929,6 +1001,10 @@ class RoboEyeSenseApp:
             self._start_follow_mode()
         elif new_mode == "Calibration":
             self._start_calibration_mode()
+        elif new_mode == "Box":
+            self._start_box_mode()
+        elif new_mode == "Pose":
+            self._start_pose_mode()
 
     def _stop_all_modes(self) -> None:
         """Stop every active mode and reset UI to the idle state."""
@@ -963,6 +1039,18 @@ class RoboEyeSenseApp:
             self._calib_capture_btn.config(state="disabled")
             self._calib_run_btn.config(state="disabled")
             self._calib_status_var.set("Select 'Calibration' mode to begin.")
+        if self._box_active:
+            self._box_active = False
+            self._box_mode_obj = None
+            self._box_status_var.set(
+                "Box mode not started.\nSelect 'Box' mode to begin."
+            )
+        if self._pose_active:
+            self._pose_active = False
+            self._pose_mode_obj = None
+            self._pose_status_var.set(
+                "Pose mode not started.\nSelect 'Pose' mode to begin."
+            )
         self._set_mode_text("Basic mode.")
 
     def _start_offset_mode(self) -> None:
@@ -1040,6 +1128,40 @@ class RoboEyeSenseApp:
             f"samples (need {_CALIB_MIN_CAPTURES}/25)."
         )
         self._mode_notebook.select(self._calibration_tab)
+
+    def _start_box_mode(self) -> None:
+        """Activate box-detection mode."""
+        try:
+            from modes.box_mode import BoxMode as _BoxMode
+        except ImportError:
+            self._box_status_var.set(
+                "Error: BoxMode not available.\n"
+                "Ensure 'modes' package is on the Python path."
+            )
+            return
+        self._box_mode_obj = _BoxMode()
+        self._box_active = True
+        self._box_status_var.set("Box mode active.\nDetected boxes: 0")
+        self._mode_notebook.select(self._box_tab)
+
+    def _start_pose_mode(self) -> None:
+        """Activate pose-estimation mode."""
+        try:
+            from modes.pose_mode import PoseMode as _PoseMode
+        except ImportError:
+            self._pose_status_var.set(
+                "Error: PoseMode not available.\n"
+                "Ensure 'modes' package is on the Python path."
+            )
+            return
+        try:
+            tag_size = float(self._pose_tag_size_var.get())
+        except ValueError:
+            tag_size = 0.05
+        self._pose_mode_obj = _PoseMode(tag_size=tag_size)
+        self._pose_active = True
+        self._pose_status_var.set("Pose mode active.\nWaiting for AprilTags…")
+        self._mode_notebook.select(self._pose_tab)
 
     def _on_calib_capture(self) -> None:
         """Request a chessboard-capture on the next frame."""
@@ -1361,6 +1483,23 @@ class RoboEyeSenseApp:
                 vis, {"key": key, "headless": False}
             )
             self._update_calibration_display()
+
+        # Box detection overlay
+        if self._box_active and self._box_mode_obj is not None:
+            vis = self._box_mode_obj.run(
+                vis, {"fps": self._fps_display, "headless": False}
+            )
+            detections_attr = getattr(self._box_mode_obj, "detections", None)
+            box_count = len(detections_attr) if detections_attr is not None else 0
+            self._box_status_var.set(
+                f"Box mode active.\nDetected boxes: {box_count}"
+            )
+
+        # Pose estimation overlay
+        if self._pose_active and self._pose_mode_obj is not None:
+            vis = self._pose_mode_obj.run(
+                vis, {"fps": self._fps_display, "headless": False}
+            )
 
         # Overlay FPS
         cv2.putText(

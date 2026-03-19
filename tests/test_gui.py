@@ -500,8 +500,8 @@ class TestRoboEyeSenseApp:
     def test_mode_notebook_exists(self, app):
         """The mode panel should contain a tabbed notebook."""
         assert hasattr(app, "_mode_notebook")
-        # There are 4 tabs: Offset, SLAM, Follow, and Calibration
-        assert app._mode_notebook.index("end") == 4
+        # There are 6 tabs: Offset, SLAM, Follow, Calibration, Box, Pose
+        assert app._mode_notebook.index("end") == 6
 
     def test_slam_mode_switches_to_slam_tab(self, app):
         """Setting SLAM mode should switch the notebook to the SLAM tab."""
@@ -541,9 +541,72 @@ class TestRoboEyeSenseApp:
         assert hasattr(app, "_mode_var")
         assert app._mode_var.get() == "Basic"
 
+    def test_mode_choices_include_box_and_pose(self, app):
+        """Mode combobox values must include Box and Pose."""
+        from robo_vision.gui import _MODE_CHOICES
+        assert "Box" in _MODE_CHOICES
+        assert "Pose" in _MODE_CHOICES
+
     def test_follow_tab_has_marker_entry(self, app):
         """Follow tab should have a marker ID entry field (internal name unchanged)."""
         assert hasattr(app, "_auto_marker_entry")
+
+    # ── Box mode ──────────────────────────────────────────────────────────
+
+    def test_box_initially_inactive(self, app):
+        assert app._box_active is False
+        assert app._box_mode_obj is None
+
+    def test_box_mode_activates(self, app):
+        app._mode_var.set("Box")
+        app._on_mode_change()
+        assert app._box_active is True
+        assert app._box_mode_obj is not None
+
+    def test_box_mode_deactivates_on_basic_switch(self, app):
+        app._mode_var.set("Box")
+        app._on_mode_change()
+        app._mode_var.set("Basic")
+        app._on_mode_change()
+        assert app._box_active is False
+        assert app._box_mode_obj is None
+
+    def test_box_mode_switches_to_box_tab(self, app):
+        """Setting Box mode should switch the notebook to the Box tab."""
+        app._mode_var.set("Box")
+        app._on_mode_change()
+        assert app._mode_notebook.index("current") == 4
+
+    # ── Pose mode ─────────────────────────────────────────────────────────
+
+    def test_pose_initially_inactive(self, app):
+        assert app._pose_active is False
+        assert app._pose_mode_obj is None
+
+    def test_pose_mode_activates(self, app):
+        app._mode_var.set("Pose")
+        app._on_mode_change()
+        assert app._pose_active is True
+        assert app._pose_mode_obj is not None
+
+    def test_pose_mode_deactivates_on_basic_switch(self, app):
+        app._mode_var.set("Pose")
+        app._on_mode_change()
+        app._mode_var.set("Basic")
+        app._on_mode_change()
+        assert app._pose_active is False
+        assert app._pose_mode_obj is None
+
+    def test_pose_mode_switches_to_pose_tab(self, app):
+        """Setting Pose mode should switch the notebook to the Pose tab."""
+        app._mode_var.set("Pose")
+        app._on_mode_change()
+        assert app._mode_notebook.index("current") == 5
+
+    def test_pose_tab_has_tag_size_entry(self, app):
+        """Pose tab should have a tag size entry field."""
+        assert hasattr(app, "_pose_tag_size_var")
+        assert app._pose_tag_size_var.get() == "0.05"
 
     # ── Merged INFO/CAMERA/QUALITY panel ─────────────────────────────────
 
