@@ -371,29 +371,29 @@ class TestRoboEyeSenseApp:
         app.root.withdraw()
 
 
-    # ── Scenario mode callbacks ───────────────────────────────────────────
+    # ── Mode callbacks ────────────────────────────────────────────────────
 
-    def test_scenario_initially_inactive(self, app):
-        assert app._scenario_active is False
-        assert app._scenario is None
+    def test_offset_initially_inactive(self, app):
+        assert app._offset_active is False
+        assert app._offset_scenario is None
 
-    def test_scenario_mode_offset_activates(self, app):
-        app._scenario_mode_var.set("Offset")
-        app._on_scenario_mode_change()
-        assert app._scenario_active is True
-        assert app._scenario is not None
+    def test_mode_offset_activates(self, app):
+        app._mode_var.set("Offset")
+        app._on_mode_change()
+        assert app._offset_active is True
+        assert app._offset_scenario is not None
 
-    def test_scenario_mode_basic_deactivates(self, app):
-        app._scenario_mode_var.set("Offset")
-        app._on_scenario_mode_change()
-        app._scenario_mode_var.set("Basic")
-        app._on_scenario_mode_change()
-        assert app._scenario_active is False
-        assert app._scenario is None
+    def test_mode_basic_deactivates(self, app):
+        app._mode_var.set("Offset")
+        app._on_mode_change()
+        app._mode_var.set("Basic")
+        app._on_mode_change()
+        assert app._offset_active is False
+        assert app._offset_scenario is None
 
-    def test_scenario_capture_stores_reference(self, app):
-        app._scenario_mode_var.set("Offset")
-        app._on_scenario_mode_change()
+    def test_offset_capture_stores_reference(self, app):
+        app._mode_var.set("Offset")
+        app._on_mode_change()
         # Simulate some detections being available
         from robo_eye_sense.results import Detection, DetectionType
         app._last_detections = [
@@ -404,21 +404,21 @@ class TestRoboEyeSenseApp:
                 corners=[(75, 75), (125, 75), (125, 125), (75, 125)],
             )
         ]
-        app._on_scenario_capture_reference()
-        assert app._scenario.has_reference is True
-        assert str(app._scenario_reset_btn.cget("state")) != "disabled"
+        app._on_offset_capture()
+        assert app._offset_scenario.has_reference is True
+        assert str(app._offset_reset_btn.cget("state")) != "disabled"
 
-    def test_scenario_reset_clears_reference(self, app):
-        app._scenario_mode_var.set("Offset")
-        app._on_scenario_mode_change()
+    def test_offset_reset_clears_reference(self, app):
+        app._mode_var.set("Offset")
+        app._on_mode_change()
         app._last_detections = []
-        app._on_scenario_capture_reference()
-        app._on_scenario_reset()
-        assert app._scenario.has_reference is False
+        app._on_offset_capture()
+        app._on_offset_reset()
+        assert app._offset_scenario.has_reference is False
 
-    def test_scenario_text_updates(self, app):
-        app._set_scenario_text("Hello test")
-        content = app._scenario_text.get("1.0", "end-1c")
+    def test_mode_text_updates(self, app):
+        app._set_mode_text("Hello test")
+        content = app._mode_text.get("1.0", "end-1c")
         assert "Hello test" in content
 
     # ── Recording callbacks ───────────────────────────────────────────────
@@ -469,45 +469,45 @@ class TestRoboEyeSenseApp:
         assert app._slam_calibrator is None
 
     def test_slam_mode_activates(self, app):
-        app._scenario_mode_var.set("SLAM")
-        app._on_scenario_mode_change()
+        app._mode_var.set("SLAM")
+        app._on_mode_change()
         assert app._slam_active is True
         assert app._slam_calibrator is not None
 
     def test_slam_basic_mode_deactivates(self, app):
-        app._scenario_mode_var.set("SLAM")
-        app._on_scenario_mode_change()
-        app._scenario_mode_var.set("Basic")
-        app._on_scenario_mode_change()
+        app._mode_var.set("SLAM")
+        app._on_mode_change()
+        app._mode_var.set("Basic")
+        app._on_mode_change()
         assert app._slam_active is False
         assert app._slam_calibrator is None
 
     def test_slam_reset_clears_map(self, app):
-        app._scenario_mode_var.set("SLAM")
-        app._on_scenario_mode_change()
+        app._mode_var.set("SLAM")
+        app._on_mode_change()
         assert app._slam_calibrator is not None
         app._on_slam_reset()
         assert len(app._slam_calibrator.marker_map) == 0
 
     def test_slam_save_button_enabled_when_active(self, app):
-        app._scenario_mode_var.set("SLAM")
-        app._on_scenario_mode_change()
+        app._mode_var.set("SLAM")
+        app._on_mode_change()
         assert str(app._slam_save_btn.cget("state")) != "disabled"
 
     def test_slam_save_button_disabled_when_inactive(self, app):
         assert str(app._slam_save_btn.cget("state")) == "disabled"
 
-    def test_scenario_notebook_exists(self, app):
+    def test_mode_notebook_exists(self, app):
         """The info panel should contain a tabbed notebook."""
-        assert hasattr(app, "_scenario_notebook")
-        # There are 3 tabs: Offset, SLAM, and Auto
-        assert app._scenario_notebook.index("end") == 3
+        assert hasattr(app, "_mode_notebook")
+        # There are 3 tabs: Offset, SLAM, and Follow
+        assert app._mode_notebook.index("end") == 3
 
     def test_slam_mode_switches_to_slam_tab(self, app):
         """Setting SLAM mode should switch the notebook to the SLAM tab."""
-        app._scenario_mode_var.set("SLAM")
-        app._on_scenario_mode_change()
-        assert app._scenario_notebook.index("current") == 1
+        app._mode_var.set("SLAM")
+        app._on_mode_change()
+        assert app._mode_notebook.index("current") == 1
 
     # ── Window title ──────────────────────────────────────────────────────
 
@@ -537,9 +537,9 @@ class TestRoboEyeSenseApp:
     # ── Mode dropdown in left panel ───────────────────────────────────────
 
     def test_mode_dropdown_exists(self, app):
-        """Mode combobox (scenario selector) should exist in the left panel."""
-        assert hasattr(app, "_scenario_mode_var")
-        assert app._scenario_mode_var.get() == "Basic"
+        """Mode combobox should exist in the left panel."""
+        assert hasattr(app, "_mode_var")
+        assert app._mode_var.get() == "Basic"
 
     def test_follow_tab_has_marker_entry(self, app):
         """Follow tab should have a marker ID entry field (internal name unchanged)."""

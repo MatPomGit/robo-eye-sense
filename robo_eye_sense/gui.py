@@ -25,7 +25,7 @@ Layout (normal mode)
 |  Recording  |                           |                  |
 |  ---------- |                           |                  |
 |[Toggle View]|                           |                  |
-|  [  Quit  ] |                           |                  |
+| [ ✕ Close ] |                           |                  |
 +-------------+---------------------------+------------------+
 |  Status bar (FPS | Quality | Detections)                   |
 +------------------------------------------------------------+
@@ -540,7 +540,7 @@ class RoboEyeSenseApp:
             variable=self._show_threshold_overlay,
         ).pack(anchor="w", pady=(8, 0))
 
-        # ── Mode (scenario selection) ─────────────────────────────────────
+        # ── Mode ──────────────────────────────────────────────────────────
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=8)
         ttk.Label(parent, text="Mode", font=("", 9, "bold")).pack(anchor="w")
 
