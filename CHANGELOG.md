@@ -7,6 +7,27 @@ stosuje [Semantic Versioning](https://semver.org/lang/pl/).
 
 ---
 
+## [0.4.0] – 2026-03-19
+
+### Dodane
+
+- **Dokumentacja nowych trybów pracy** – uzupełniono README o szczegółowe
+  instrukcje CLI i przykłady użycia dla trybów: *calibration* (kalibracja
+  kamery szachownicą), *box* (detekcja pudełek/prostopadłościanów), *pose*
+  (estymacja pozy 6-DoF tagów AprilTag) i *follow* (śledzenie markera
+  z generowaniem sygnałów sterowania).
+- **Numer wersji w tytule okna GUI** – okno główne Tkinter wyświetla
+  aktualną wersję w pasku tytułu (np. „robo-eye-sense v0.4.0").
+
+### Poprawione
+
+- Naprawiono tytuł okna GUI – zastąpiono stały ciąg „robot-vision"
+  dynamicznym `f"{APP_NAME} v{__version__}"`.
+- Poprawiono CHANGELOG – zamieniono `--scenario` na `--mode` w opisach
+  trybów Offset i SLAM (v0.2.0).
+
+---
+
 ## [0.3.0] – 2026-03-18
 
 ### Dodane
@@ -35,7 +56,7 @@ stosuje [Semantic Versioning](https://semver.org/lang/pl/).
 
 ### Dodane
 
-- **Scenariusz SLAM** (`--scenario slam`) – inkrementalne budowanie mapy
+- **Scenariusz SLAM** (`--mode slam`) – inkrementalne budowanie mapy
   markerów 3-D z estymacją pozy 6-DoF robota; zapis/odczyt mapy JSON
   (PR #32).
 - **Zakładka SLAM w GUI** – wizualizacja 3-D (widok z góry), lista
@@ -43,7 +64,7 @@ stosuje [Semantic Versioning](https://semver.org/lang/pl/).
 - **Nagrywanie wideo** (`--record FILE`) – klasa `VideoRecorder`
   (start/stop/write_frame), przycisk w GUI, obsługa w trybie bezgłowym
   i scenariuszowym (PR #27).
-- **Scenariusz Offset** (`--scenario offset`) – kalibracja przesunięcia
+- **Scenariusz Offset** (`--mode offset`) – kalibracja przesunięcia
   kamery na podstawie pozycji AprilTagów z estymacją odległości do
   tagów i pozycji referencyjnej (PR #21, #26).
 - **Integracja scenariuszy z GUI** – zakładki Offset i SLAM w panelu

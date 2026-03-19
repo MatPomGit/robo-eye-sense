@@ -67,7 +67,7 @@ __all__ = [
     "__version__",
 ]
 APP_NAME = "robo-eye-sense"
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 
 def __getattr__(name: str) -> Any:
