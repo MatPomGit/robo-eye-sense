@@ -37,6 +37,12 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .results import Detection, DetectionType
 
+# RANSAC PnP tuning parameters
+_RANSAC_REPROJ_THRESHOLD = 8.0   # max reprojection error (px) to accept an inlier
+_RANSAC_ITER_SINGLE = 100        # RANSAC iterations for single-marker PnP
+_RANSAC_ITER_MULTI = 200         # RANSAC iterations for multi-marker PnP
+_CORNERS_PER_MARKER = 4          # corners produced by each AprilTag detection
+
 
 # ---------------------------------------------------------------------------
 # Camera-matrix helpers (no cv2 dependency)
@@ -632,8 +638,8 @@ def _solve_marker_pose(
 
     success, rvec, tvec, _inliers = _cv2.solvePnPRansac(
         obj_pts, img_pts, camera_matrix, dist,
-        iterationsCount=100,
-        reprojectionError=8.0,
+        iterationsCount=_RANSAC_ITER_SINGLE,
+        reprojectionError=_RANSAC_REPROJ_THRESHOLD,
         flags=_cv2.SOLVEPNP_ITERATIVE,
     )
     if not success:
@@ -713,8 +719,8 @@ def _estimate_pose_multi_marker(
 
     success, rvec, tvec, inliers = _cv2.solvePnPRansac(
         obj_pts, img_pts, camera_matrix, dist,
-        iterationsCount=200,
-        reprojectionError=8.0,
+        iterationsCount=_RANSAC_ITER_MULTI,
+        reprojectionError=_RANSAC_REPROJ_THRESHOLD,
         flags=_cv2.SOLVEPNP_ITERATIVE,
     )
     if not success:
@@ -742,7 +748,9 @@ def _estimate_pose_multi_marker(
 
     n_markers = len(used_ids)
     if inliers is not None:
-        n_markers = len(set(idx // 4 for idx in inliers.flatten()))
+        n_markers = len(set(
+            idx // _CORNERS_PER_MARKER for idx in inliers.flatten()
+        ))
 
     return RobotPose3D(
         position=(float(cam_pos[0]), float(cam_pos[1]), float(cam_pos[2])),
