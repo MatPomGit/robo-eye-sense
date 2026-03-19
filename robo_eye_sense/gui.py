@@ -240,7 +240,7 @@ class RoboEyeSenseApp:
         self.camera = camera
         self.detector = detector
 
-        self.root.title("robot-vision")
+        self.root.title(f"{APP_NAME} v{__version__}")
         self.root.resizable(True, True)
 
         # ── State variables ──────────────────────────────────────────────

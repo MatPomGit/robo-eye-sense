@@ -21,6 +21,10 @@ oraz bezgłowy interfejs CLI do wdrożeń na sprzęcie wbudowanym.
 | **Trzy tryby pracy** | Normal / Fast (połowa rozdzielczości) / Robust (wyostrzanie + śledzenie Kalmana) |
 | **Scenariusz Offset** | Kalibracja przesunięcia kamery – porównanie pozycji AprilTagów z estymacją odległości |
 | **SLAM – budowanie mapy markerów** | Inkrementalna mapa 3-D z estymacją pozy 6-DoF robota (`cv2.solvePnP`) |
+| **Kalibracja kamery** | Wyznaczanie parametrów wewnętrznych kamery na podstawie wzorca szachownicy (`cv2.calibrateCamera`) |
+| **Detekcja pudełek (box)** | Wykrywanie prostokątnych obiektów (pudełka, prostopadłościany) w czasie rzeczywistym |
+| **Estymacja pozy (pose)** | Estymacja pozy 6-DoF każdego znacznika AprilTag (`cv2.solvePnP`) |
+| **Śledzenie markera (follow)** | Aktywne śledzenie AprilTag / pudełka z generowaniem sygnałów sterowania robota |
 | **Estymacja odległości** | Model kamery otworkowej (pinhole) – odległość do każdego tagu i do pozycji referencyjnej |
 | **Nagrywanie wideo** | Zapis strumienia do pliku MP4 (`cv2.VideoWriter`) – CLI, GUI i tryb bezgłowy |
 | **Tryb bezgłowy (headless)** | Praca bez wyświetlacza – wyniki na stdout; idealne dla urządzeń wbudowanych |
@@ -154,6 +158,81 @@ wyświetla:
 - **Wizualizację 3-D** zrekonstruowanej przestrzeni (widok z góry) wraz
   z pozycją kamery.
 
+#### Tryb kalibracji kamery (calibration)
+
+Tryb *calibration* pozwala wyznaczyć parametry wewnętrzne kamery
+(macierz kamery, współczynniki dystorsji) na podstawie wzorca szachownicy.
+
+```bash
+# Domyślna szachownica 9×6, zapis do calibration.npz
+python main.py --mode calibration
+
+# Niestandardowy rozmiar szachownicy i ścieżka wyjściowa
+python main.py --mode calibration --chessboard-size 7x5 --calib-output my_calib.npz
+
+# Kalibracja na pliku wideo
+python main.py --mode calibration --source calibration_video.mp4
+```
+
+W trybie kalibracji naciśnij **spację**, aby przechwycić klatkę z wykrytym
+wzorcem. Program wymaga 15–25 poprawnych ujęć, po czym automatycznie
+oblicza parametry kamery i zapisuje je do pliku `.npz`.
+
+#### Tryb detekcji pudełek (box)
+
+Tryb *box* wykrywa prostokątne obiekty (pudełka, prostopadłościany)
+w czasie rzeczywistym przy użyciu potoku detekcji krawędziowej.
+
+```bash
+# Detekcja pudełek z domyślnej kamery
+python main.py --mode box
+
+# Bezgłowy – wyniki na stdout
+python main.py --mode box --headless
+
+# Z nagrywaniem sesji
+python main.py --mode box --record box_session.mp4
+```
+
+#### Tryb estymacji pozy (pose)
+
+Tryb *pose* szacuje pozę 6-DoF (pozycja + orientacja) każdego widocznego
+znacznika AprilTag za pomocą `cv2.solvePnP`.
+
+```bash
+# Estymacja pozy z domyślnym rozmiarem tagu (5 cm)
+python main.py --mode pose
+
+# Z niestandardowym rozmiarem tagu i plikiem kalibracji
+python main.py --mode pose --tag-size 0.10 --calib-output calibration.npz
+
+# Bezgłowy
+python main.py --mode pose --headless --tag-size 0.05
+```
+
+#### Tryb śledzenia (follow)
+
+Tryb *follow* aktywnie śledzi wybrany znacznik AprilTag (lub pudełko
+jako awaryjny cel) i generuje sygnały sterowania (prędkość liniowa
+i kątowa) dla robota mobilnego.
+
+```bash
+# Śledzenie pierwszego widocznego markera
+python main.py --mode follow
+
+# Śledzenie konkretnego markera (ID = 5)
+python main.py --mode follow --follow-marker 5
+
+# Z rezerwowym śledzeniem pudełka, gdy brak tagów
+python main.py --mode follow --follow-box
+
+# Z ustawioną odległością docelową (1 m) i rozmiarem tagu
+python main.py --mode follow --target-distance 1.0 --tag-size 0.05
+
+# Bezgłowy z kalibracją kamery
+python main.py --mode follow --headless --calib-output calibration.npz
+```
+
 #### Estymacja odległości (scenariusz Offset)
 
 Scenariusz Offset automatycznie szacuje odległość od kamery do każdego
@@ -183,7 +262,7 @@ Przy każdym uruchomieniu program wyświetla podsumowanie aktywnej
 konfiguracji w terminalu:
 
 ```
-robo-eye-sense 0.3.0
+robo-eye-sense 0.4.0
 Display mode      : display
 Detection mode    : normal
 Detectors enabled : AprilTag
@@ -286,6 +365,18 @@ python main.py --mode offset --headless
 
 # 7. Kamera USB #2, tryb robuśny, GUI
 python main.py --source 2 --quality high --gui
+
+# 8. Kalibracja kamery szachownicą
+python main.py --mode calibration --chessboard-size 9x6 --calib-output cam.npz
+
+# 9. Detekcja pudełek z nagrywaniem
+python main.py --mode box --record boxes.mp4
+
+# 10. Estymacja pozy tagów z plikiem kalibracji
+python main.py --mode pose --tag-size 0.10 --calib-output cam.npz
+
+# 11. Śledzenie markera ID=3 z rezerwą na pudełko
+python main.py --mode follow --follow-marker 3 --follow-box --target-distance 0.8
 ```
 
 ---
@@ -308,8 +399,16 @@ robo_eye_sense/
 ├── camera.py              # VideoCapture wrapper (context manager)
 ├── offset_scenario.py     # Camera-offset calibration + distance estimation (pinhole model)
 ├── marker_map.py          # SLAM marker map building + robot localisation (6-DoF)
+├── auto_scenario.py       # Auto-follow scenario – śledzenie markera z wektorem sterowania
 ├── recorder.py            # Video recording utility (MP4, context manager)
 └── gui.py                 # Tkinter GUI (Offset + SLAM tabs, 3-D visualisation, recording)
+modes/
+├── __init__.py            # Exportuje BaseMode, CalibrationMode, BoxMode, PoseMode, FollowMode
+├── base.py                # BaseMode – abstrakcyjna klasa bazowa (run(frame, context))
+├── calibration_mode.py    # CalibrationMode – kalibracja kamery szachownicą
+├── box_mode.py            # BoxMode – detekcja prostokątnych obiektów
+├── pose_mode.py           # PoseMode – estymacja pozy 6-DoF tagów AprilTag
+└── follow_mode.py         # FollowMode – śledzenie markera z sygnałami sterowania
 main.py                    # CLI entry point
 ```
 
