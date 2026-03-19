@@ -136,7 +136,7 @@ python main.py --mode slam --map-file my_map.json
 python main.py --mode slam --record slam_session.mp4
 
 # Z plikiem kalibracji kamery (lepsza dokładność SLAM)
-python main.py --mode slam --calib-output calibration.npz --tag-size 0.05
+python main.py --mode slam --cal calibration.npz --tag-size 0.05
 ```
 
 W trybie GUI (``--gui``) scenariusze Offset i SLAM dostępne są jako zakładki w panelu informacyjnym po prawej stronie. Zakładka **SLAM** wyświetla:
@@ -154,7 +154,7 @@ Tryb *calibration* pozwala wyznaczyć parametry wewnętrzne kamery (macierz kame
 python main.py --mode calibration
 
 # Niestandardowy rozmiar szachownicy i ścieżka wyjściowa
-python main.py --mode calibration --chessboard-size 7x5 --calib-output my_calib.npz
+python main.py --mode calibration --chessboard-size 7x5 --cal my_calib.npz
 
 # Kalibracja na pliku wideo
 python main.py --mode calibration --source calibration_video.mp4
@@ -188,7 +188,7 @@ znacznika AprilTag za pomocą `cv2.solvePnP`.
 python main.py --mode pose
 
 # Z niestandardowym rozmiarem tagu i plikiem kalibracji
-python main.py --mode pose --tag-size 0.10 --calib-output calibration.npz
+python main.py --mode pose --tag-size 0.10 --cal calibration.npz
 
 # Bezgłowy
 python main.py --mode pose --headless --tag-size 0.05
@@ -214,7 +214,7 @@ python main.py --mode follow --follow-box
 python main.py --mode follow --target-distance 1.0 --tag-size 0.05
 
 # Bezgłowy z kalibracją kamery
-python main.py --mode follow --headless --calib-output calibration.npz
+python main.py --mode follow --headless --cal calibration.npz
 ```
 
 #### Estymacja odległości (scenariusz Offset)
@@ -287,7 +287,7 @@ wraz z ich wartościami domyślnymi i opisem.
 | `--follow-box` | *(wył.)* | W trybie *follow*: cofnięcie do śledzenia pudełka gdy nie ma tagów. |
 | `--target-distance M` | `0.5` | Żądana odległość do celu w metrach (tryb follow). |
 | `--chessboard-size COLSxROWS` | `9x6` | Wymiary wewnętrznych narożników szachownicy kalibracyjnej. |
-| `--calib-output FILE` | `calibration.npz` | Plik NPZ z danymi kalibracji kamery (zapis/odczyt). |
+| `--cal FILE` | `calibration.npz` | Plik NPZ z danymi kalibracji kamery (zapis/odczyt). |
 | `--info` | *(wył.)* | Wyświetla informacje o kamerze (rozdzielczość, FPS, backend) i kończy działanie. |
 | `--ros-status` | *(wył.)* | Wyświetla stan połączenia z ROS2: dostępność `rclpy`, nazwa węzła, topiki publikowane i subskrybowane, po czym kończy działanie. |
 | `--ros` | *(wył.)* | Uruchamia mostek ROS2 podczas pętli detekcji. Wymaga zainstalowanego i sourced'owanego ROS2. Publikuje detekcje na `/robo_vision/detections` i pozę robota na `/robo_vision/robot_pose`; subskrybuje `/robo_vision/config` do zdalnej konfiguracji. |
@@ -307,7 +307,7 @@ w trybie headless:
 | `--quality low` | Szybsze przetwarzanie na słabym sprzęcie wbudowanym. |
 | `--record FILE` | Zapis wideo nawet w trybie headless (bez podglądu). |
 | `--map-file FILE` | Zapis/wczytanie mapy SLAM do/z pliku JSON. |
-| `--calib-output FILE` | Użycie pliku kalibracji w trybie SLAM dla lepszej dokładności. |
+| `--cal FILE` | Użycie pliku kalibracji w trybie SLAM dla lepszej dokładności. |
 | `--tag-size METRES` | Dokładny rozmiar fizyczny tagu – wpływa na estymację odległości i SLAM. |
 | `--tag-names ID=NAME` | Czytelne etykiety w logach (np. `--tag-names 1=robot 2=goal`). |
 | `--no-apriltag` / `--qr` / `--laser` | Włączanie/wyłączanie detektorów stosownie do sceny. |
@@ -322,7 +322,7 @@ python main.py \
   --source /dev/video0 \
   --quality normal \
   --tag-size 0.05 \
-  --calib-output calibration.npz \
+  --cal calibration.npz \
   --map-file my_map.json \
   --record slam_session.mp4
 ```
@@ -352,13 +352,13 @@ python main.py --mode offset --headless
 python main.py --source 2 --quality high --gui
 
 # 8. Kalibracja kamery szachownicą
-python main.py --mode calibration --chessboard-size 9x6 --calib-output cam.npz
+python main.py --mode calibration --chessboard-size 9x6 --cal cam.npz
 
 # 9. Detekcja pudełek z nagrywaniem
 python main.py --mode box --record boxes.mp4
 
 # 10. Estymacja pozy tagów z plikiem kalibracji
-python main.py --mode pose --tag-size 0.10 --calib-output cam.npz
+python main.py --mode pose --tag-size 0.10 --cal cam.npz
 
 # 11. Śledzenie markera ID=3 z rezerwą na pudełko
 python main.py --mode follow --follow-marker 3 --follow-box --target-distance 0.8

@@ -124,7 +124,7 @@ def merge_config_with_args(
         "follow_marker": "follow_marker",
         "follow_box": "follow_box",
         "chessboard_size": "chessboard_size",
-        "calib_output": "calib_output",
+        "cal": "cal",
     }
 
     for yaml_key, attr_name in flat_keys.items():

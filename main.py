@@ -240,7 +240,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "--calib-output",
+        "--cal",
         default="calibration.npz",
         metavar="FILE",
         help="Output file for camera calibration data.",
@@ -539,7 +539,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         from robo_vision.headless_guide import print_headless_guide
 
         report = print_headless_guide(
-            calib_path=args.calib_output,
+            calib_path=args.cal,
             tag_names_file=args.tag_names_file,
             tag_names=tag_names,
         )
@@ -790,17 +790,17 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
 
         # Optionally load camera calibration from a .npz file
         camera_matrix = None
-        if args.calib_output:
-            if os.path.isfile(args.calib_output):
+        if args.cal:
+            if os.path.isfile(args.cal):
                 try:
                     import numpy as _np
-                    _cal = _np.load(args.calib_output)
+                    _cal = _np.load(args.cal)
                     camera_matrix = _cal["camera_matrix"].tolist()
-                    logger.info("Calibration loaded : %s", args.calib_output)
+                    logger.info("Calibration loaded : %s", args.cal)
                 except (OSError, KeyError) as _exc:
                     logger.warning(
                         "could not load calibration from %r: %s",
-                        args.calib_output, _exc,
+                        args.cal, _exc,
                     )
 
         calibrator = SlamCalibrator(
@@ -987,14 +987,14 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                 return 1
             active_mode = CalibrationMode(
                 chessboard_size=(cols, rows),
-                output_path=args.calib_output,
+                output_path=args.cal,
             )
         elif args.mode == "box":
             active_mode = BoxMode()
         elif args.mode == "pose":
             active_mode = PoseMode(
                 tag_size=args.tag_size,
-                calibration_path=args.calib_output,
+                calibration_path=args.cal,
             )
         elif args.mode == "follow":
             active_mode = FollowMode(
@@ -1002,7 +1002,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                 follow_box=args.follow_box,
                 target_distance=args.target_distance,
                 tag_size=args.tag_size,
-                calibration_path=args.calib_output,
+                calibration_path=args.cal,
             )
 
         recorder = None

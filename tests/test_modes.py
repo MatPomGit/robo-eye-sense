@@ -294,7 +294,7 @@ class TestCLINewModes:
         from main import _parse_args
 
         args = _parse_args([])
-        assert args.calib_output == "calibration.npz"
+        assert args.cal == "calibration.npz"
 
     def test_tag_size_default(self):
         from main import _parse_args
