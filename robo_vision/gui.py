@@ -3,24 +3,21 @@
 Layout (normal mode)
 ---------------------
 +-------------+---------------------------+------------------+
-|  CONTROLS   |       VIDEO FEED          | INFO/CAM/QUALITY |
-|  ---------- |  (annotated frame)        | ---------------- |
-|  Quality    |                           | App / FPS / Res  |
-|  [combo]    |                           | Quality label    |
-|  ---------- |                           | ---------------- |
-|  Detectors  |                           | Detected objects |
-|  [x] April  |                           | (list)           |
-|  [x] QR     |                           | ---------------- |
-|  [x] Laser  |                           |  Mode            |
-|  ---------- |                           | [Offset][SLAM]   |
-|  Parameters |                           | [Follow] (tabs)  |
-|  Threshold  |                           | (info in tabs)   |
+|  CONTROLS   |       VIDEO FEED          |   MODE           |
+|  ---------- |  (annotated frame)        | [mode combobox]  |
+|  Quality    |                           | ---------------- |
+|  [combo]    +---------------------------+ [Offset][SLAM]   |
+|  ---------- |  INFO / CAMERA / QUALITY  | [Follow][Calib]  |
+|  Detectors  |  App / FPS / Res          | (tabs, full col) |
+|  [x] April  |  Quality label            |                  |
+|  [x] QR     |  Detected objects (5 rows)|                  |
+|  [x] Laser  |                           |                  |
+|  ---------- |                           |                  |
+|  Parameters |                           |                  |
+|  Threshold  |                           |                  |
 |  Target area|                           |                  |
 |  Sensitivity|                           |                  |
 |  [ ] Overlay|                           |                  |
-|  ---------- |                           |                  |
-|  Mode       |                           |                  |
-|  [combo]    |                           |                  |
 |  ---------- |                           |                  |
 |  Recording  |                           |                  |
 |  ---------- |                           |                  |
@@ -30,7 +27,8 @@ Layout (normal mode)
 |  Status bar (FPS | Quality | Detections)                   |
 +------------------------------------------------------------+
 
-Compact layout: camera column is fixed-width; info panel expands.
+Compact layout: camera is in the upper-right corner; controls, info panel, and
+mode panel expand proportionally to fill the remaining space.
 Keyboard shortcuts: Ctrl+1 → Low, Ctrl+2 → Normal, Ctrl+3 → High.
 
 Usage::
@@ -55,7 +53,7 @@ import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import cv2
 import numpy as np
@@ -101,7 +99,10 @@ _QUALITY_DESCRIPTIONS: dict[DetectionMode, str] = {
 }
 
 # Available mode choices for the mode combobox
-_MODE_CHOICES: list[str] = ["Basic", "Offset", "SLAM", "Follow"]
+_MODE_CHOICES: list[str] = ["Basic", "Offset", "SLAM", "Follow", "Calibration"]
+
+# Minimum number of chessboard captures before calibration can be run
+_CALIB_MIN_CAPTURES: int = 15
 
 
 def render_3d_scene(
@@ -294,6 +295,12 @@ class RoboEyeSenseApp:
         self._slam_active = False
         self._last_robot_pose = RobotPose3D()
 
+        # Calibration mode state
+        self._calibration_mode_obj: Optional[Any] = None
+        self._calibration_active = False
+        self._calib_capture_flag = False
+        self._calib_run_flag = False
+
         # Recording state
         self._recorder: Optional[VideoRecorder] = None
         self._record_path: Optional[str] = initial_record_path
@@ -318,23 +325,25 @@ class RoboEyeSenseApp:
 
     def _build_ui(self) -> None:
         """Construct all widgets and layout."""
-        self.root.columnconfigure(0, minsize=200)
+        # Normal mode: 3 cols (ctrl | camera+info | mode), 2 content rows
+        self.root.columnconfigure(0, minsize=200, weight=0)
         self.root.columnconfigure(1, weight=1)
-        self.root.columnconfigure(2, minsize=280)
-        self.root.rowconfigure(0, weight=1)
+        self.root.columnconfigure(2, minsize=280, weight=0)
+        self.root.rowconfigure(0, weight=1)   # camera row expands
+        self.root.rowconfigure(1, weight=0)   # info row shrinks to content
 
         # Minimum window size so that side panels are never hidden.
         self.root.minsize(780, 480)
 
-        # Left control panel
-        ctrl_frame = ttk.Frame(self.root, padding=8, width=200)
-        ctrl_frame.grid(row=0, column=0, sticky="nsew")
-        ctrl_frame.grid_propagate(False)
+        # Left control panel (spans both content rows)
+        self._ctrl_frame = ttk.Frame(self.root, padding=8, width=200)
+        self._ctrl_frame.grid(row=0, column=0, rowspan=2, sticky="nsew")
+        self._ctrl_frame.grid_propagate(False)
 
         # Scrollable wrapper for control panel contents
-        ctrl_canvas = tk.Canvas(ctrl_frame, highlightthickness=0)
+        ctrl_canvas = tk.Canvas(self._ctrl_frame, highlightthickness=0)
         ctrl_scrollbar = ttk.Scrollbar(
-            ctrl_frame, orient="vertical", command=ctrl_canvas.yview,
+            self._ctrl_frame, orient="vertical", command=ctrl_canvas.yview,
         )
         inner_frame = ttk.Frame(ctrl_canvas)
 
@@ -354,19 +363,24 @@ class RoboEyeSenseApp:
         ctrl_canvas.bind("<MouseWheel>", _on_ctrl_mousewheel)
         inner_frame.bind("<MouseWheel>", _on_ctrl_mousewheel)
 
-        # Centre video canvas
+        # Centre video canvas (row=0, col=1 in normal mode)
         self._canvas = tk.Canvas(self.root, bg="black")
         self._canvas.grid(row=0, column=1, sticky="nsew")
 
-        # Right info panel
-        info_frame = ttk.Frame(self.root, padding=8, width=220)
-        info_frame.grid(row=0, column=2, sticky="nsew")
-        info_frame.grid_propagate(False)
+        # Info panel — below the camera in col=1 (row=1)
+        self._info_frame = ttk.Frame(self.root, padding=8)
+        self._info_frame.grid(row=1, column=1, sticky="nsew")
+
+        # Right mode panel — full right column (col=2, rowspan=2)
+        self._mode_frame = ttk.Frame(self.root, padding=8, width=280)
+        self._mode_frame.grid(row=0, column=2, rowspan=2, sticky="nsew")
+        self._mode_frame.grid_propagate(False)
 
         self._build_controls(inner_frame)
-        self._build_info_panel(info_frame)
+        self._build_info_panel(self._info_frame)
+        self._build_mode_panel(self._mode_frame)
 
-        # Status bar at the bottom
+        # Status bar at the bottom (row=2 — below both content rows)
         self._status_var = tk.StringVar(value="Ready")
         status_bar = ttk.Label(
             self.root,
@@ -375,16 +389,16 @@ class RoboEyeSenseApp:
             anchor="w",
             padding=(4, 2),
         )
-        status_bar.grid(row=1, column=0, columnspan=3, sticky="ew")
+        status_bar.grid(row=2, column=0, columnspan=3, sticky="ew")
 
     def _build_controls(self, parent: ttk.Frame) -> None:
         """Build the left-side control panel."""
         ttk.Label(parent, text="CONTROLS", font=("", 10, "bold")).pack(
-            anchor="w", pady=(0, 6)
+            anchor="w", pady=(0, 4)
         )
 
         # ── Quality (detection mode) ──────────────────────────────────────
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=2)
         ttk.Label(parent, text="Quality").pack(anchor="w")
 
         quality_combo = ttk.Combobox(
@@ -417,7 +431,7 @@ class RoboEyeSenseApp:
         ).pack(anchor="w")
 
         # ── Detection modes ───────────────────────────────────────────────
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=2)
         ttk.Label(parent, text="Detection modes").pack(anchor="w")
 
         self._april_cb = ttk.Checkbutton(
@@ -443,12 +457,12 @@ class RoboEyeSenseApp:
         ).pack(anchor="w")
 
         # ── Parameters ───────────────────────────────────────────────────
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=8)
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=3)
         ttk.Label(parent, text="Parameters").pack(anchor="w")
 
         # Laser threshold
         ttk.Label(parent, text="Laser threshold min (0–255)").pack(
-            anchor="w", pady=(6, 0)
+            anchor="w", pady=(2, 0)
         )
         self._threshold_label = ttk.Label(
             parent, text=str(self._laser_threshold.get())
@@ -465,7 +479,7 @@ class RoboEyeSenseApp:
 
         # Laser threshold max
         ttk.Label(parent, text="Laser threshold max (0–255)").pack(
-            anchor="w", pady=(6, 0)
+            anchor="w", pady=(2, 0)
         )
         self._threshold_max_label = ttk.Label(
             parent, text=str(self._laser_threshold_max.get())
@@ -482,7 +496,7 @@ class RoboEyeSenseApp:
 
         # Laser target area
         ttk.Label(parent, text="Laser target area (px)").pack(
-            anchor="w", pady=(8, 0)
+            anchor="w", pady=(3, 0)
         )
         self._target_area_label = ttk.Label(
             parent, text=str(self._laser_target_area.get())
@@ -499,7 +513,7 @@ class RoboEyeSenseApp:
 
         # Laser sensitivity
         ttk.Label(parent, text="Laser sensitivity (0–100)").pack(
-            anchor="w", pady=(8, 0)
+            anchor="w", pady=(3, 0)
         )
         self._sensitivity_label = ttk.Label(
             parent, text=str(self._laser_sensitivity.get())
@@ -516,7 +530,7 @@ class RoboEyeSenseApp:
 
         # Laser channel selection
         ttk.Label(parent, text="Laser channels").pack(
-            anchor="w", pady=(8, 0)
+            anchor="w", pady=(3, 0)
         )
         _ch_frame = ttk.Frame(parent)
         _ch_frame.pack(anchor="w")
@@ -538,24 +552,10 @@ class RoboEyeSenseApp:
             parent,
             text="Show threshold overlay",
             variable=self._show_threshold_overlay,
-        ).pack(anchor="w", pady=(8, 0))
-
-        # ── Mode ──────────────────────────────────────────────────────────
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=8)
-        ttk.Label(parent, text="Mode", font=("", 9, "bold")).pack(anchor="w")
-
-        mode_combo = ttk.Combobox(
-            parent,
-            textvariable=self._mode_var,
-            values=_MODE_CHOICES,
-            state="readonly",
-            width=28,
-        )
-        mode_combo.pack(anchor="w", pady=(2, 4))
-        mode_combo.bind("<<ComboboxSelected>>", self._on_mode_change)
+        ).pack(anchor="w", pady=(3, 0))
 
         # ── Recording ─────────────────────────────────────────────────────
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=8)
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=3)
         ttk.Label(parent, text="Recording", font=("", 9, "bold")).pack(anchor="w")
 
         self._record_btn = ttk.Button(
@@ -573,7 +573,7 @@ class RoboEyeSenseApp:
         ).pack(anchor="w")
 
         # ── Layout toggle ─────────────────────────────────────────────────
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=8)
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=3)
         self._layout_btn_var = tk.StringVar(value="Compact view")
         self._layout_btn = ttk.Button(
             parent,
@@ -583,11 +583,11 @@ class RoboEyeSenseApp:
         self._layout_btn.pack(fill="x", pady=(0, 4))
 
         # ── Quit button ───────────────────────────────────────────────────
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=2)
         ttk.Button(parent, text="\u2715 Close", command=self._on_close).pack(fill="x")
 
     def _build_info_panel(self, parent: ttk.Frame) -> None:
-        """Build the right-side information panel."""
+        """Build the info / camera / quality panel (below the video in normal mode)."""
         ttk.Label(parent, text="INFO / CAMERA / QUALITY", font=("", 10, "bold")).pack(
             anchor="w", pady=(0, 4)
         )
@@ -615,7 +615,7 @@ class RoboEyeSenseApp:
         self._info_quality_label.pack(anchor="w")
 
         # Detected objects list
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=8)
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
         ttk.Label(parent, text="Detected objects", font=("", 9, "bold")).pack(
             anchor="w"
         )
@@ -628,17 +628,29 @@ class RoboEyeSenseApp:
             yscrollcommand=scrollbar.set,
             font=("Courier", 8),
             selectmode=tk.SINGLE,
-            height=10,
+            height=5,
         )
         scrollbar.config(command=self._detections_list.yview)
         self._detections_list.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        # Mode information panel — tabbed notebook
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=8)
-        ttk.Label(parent, text="Mode", font=("", 9, "bold")).pack(
-            anchor="w"
+    def _build_mode_panel(self, parent: ttk.Frame) -> None:
+        """Build the right-side mode panel (mode selector + tabbed notebook)."""
+        ttk.Label(parent, text="MODE", font=("", 10, "bold")).pack(
+            anchor="w", pady=(0, 4)
         )
+
+        mode_combo = ttk.Combobox(
+            parent,
+            textvariable=self._mode_var,
+            values=_MODE_CHOICES,
+            state="readonly",
+            width=28,
+        )
+        mode_combo.pack(anchor="w", pady=(0, 4))
+        mode_combo.bind("<<ComboboxSelected>>", self._on_mode_change)
+
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
 
         self._mode_notebook = ttk.Notebook(parent)
         self._mode_notebook.pack(fill="both", expand=True)
@@ -660,6 +672,12 @@ class RoboEyeSenseApp:
         self._mode_notebook.add(auto_tab, text="Follow")
         self._build_auto_tab(auto_tab)
         self._auto_tab = auto_tab
+
+        # ── Calibration tab ───────────────────────────────────────────────
+        calib_tab = ttk.Frame(self._mode_notebook, padding=4)
+        self._mode_notebook.add(calib_tab, text="Calibration")
+        self._build_calibration_tab(calib_tab)
+        self._calibration_tab = calib_tab
 
     def _build_offset_tab(self, parent: ttk.Frame) -> None:
         """Build the Offset mode tab contents."""
@@ -823,6 +841,62 @@ class RoboEyeSenseApp:
         self._auto_markers_list.pack(side="left", fill="both", expand=True)
         auto_scroll.pack(side="right", fill="y")
 
+    def _build_calibration_tab(self, parent: ttk.Frame) -> None:
+        """Build the Calibration mode tab contents."""
+        # Chessboard size
+        cb_frame = ttk.Frame(parent)
+        cb_frame.pack(fill="x", pady=(0, 2))
+        ttk.Label(cb_frame, text="Board (cols×rows):").pack(side="left")
+        self._calib_cols_var = tk.StringVar(value="9")
+        self._calib_rows_var = tk.StringVar(value="6")
+        ttk.Entry(cb_frame, textvariable=self._calib_cols_var, width=3).pack(
+            side="left", padx=(4, 0)
+        )
+        ttk.Label(cb_frame, text="×").pack(side="left")
+        ttk.Entry(cb_frame, textvariable=self._calib_rows_var, width=3).pack(
+            side="left"
+        )
+
+        # Output path
+        out_frame = ttk.Frame(parent)
+        out_frame.pack(fill="x", pady=(0, 4))
+        ttk.Label(out_frame, text="Output:").pack(side="left")
+        self._calib_output_var = tk.StringVar(value="calibration.npz")
+        ttk.Entry(
+            out_frame, textvariable=self._calib_output_var, width=18,
+        ).pack(side="left", padx=(4, 0), fill="x", expand=True)
+
+        # Action buttons
+        self._calib_capture_btn = ttk.Button(
+            parent,
+            text="Capture frame",
+            command=self._on_calib_capture,
+            state="disabled",
+        )
+        self._calib_capture_btn.pack(fill="x", pady=(0, 2))
+
+        self._calib_run_btn = ttk.Button(
+            parent,
+            text="Run calibration",
+            command=self._on_calib_run,
+            state="disabled",
+        )
+        self._calib_run_btn.pack(fill="x", pady=2)
+
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
+
+        # Status display
+        self._calib_status_var = tk.StringVar(
+            value="Select 'Calibration' mode to begin."
+        )
+        ttk.Label(
+            parent,
+            textvariable=self._calib_status_var,
+            font=("Courier", 8),
+            wraplength=260,
+            justify="left",
+        ).pack(anchor="w")
+
 
     def _set_quality(self, mode: DetectionMode) -> None:
         """Programmatically switch to quality *mode* and update all UI elements."""
@@ -853,6 +927,8 @@ class RoboEyeSenseApp:
             self._start_slam_mode()
         elif new_mode == "Follow":
             self._start_follow_mode()
+        elif new_mode == "Calibration":
+            self._start_calibration_mode()
 
     def _stop_all_modes(self) -> None:
         """Stop every active mode and reset UI to the idle state."""
@@ -879,6 +955,14 @@ class RoboEyeSenseApp:
                 "Select 'Follow' mode to begin."
             )
             self._auto_markers_list.delete(0, tk.END)
+        if self._calibration_active:
+            self._calibration_active = False
+            self._calibration_mode_obj = None
+            self._calib_capture_flag = False
+            self._calib_run_flag = False
+            self._calib_capture_btn.config(state="disabled")
+            self._calib_run_btn.config(state="disabled")
+            self._calib_status_var.set("Select 'Calibration' mode to begin.")
         self._set_mode_text("Basic mode.")
 
     def _start_offset_mode(self) -> None:
@@ -925,6 +1009,71 @@ class RoboEyeSenseApp:
         self._last_auto_result = None
         self._auto_info_var.set("Auto-follow started.\nWaiting for markers…")
         self._mode_notebook.select(self._auto_tab)
+
+    def _start_calibration_mode(self) -> None:
+        """Activate the chessboard camera-calibration mode."""
+        try:
+            from modes.calibration_mode import CalibrationMode as _CalibrationMode
+        except ImportError:
+            self._calib_status_var.set(
+                "Error: CalibrationMode not available.\n"
+                "Ensure 'modes' package is on the Python path."
+            )
+            return
+        try:
+            cols = int(self._calib_cols_var.get())
+            rows = int(self._calib_rows_var.get())
+        except ValueError:
+            cols, rows = 9, 6
+        output = self._calib_output_var.get().strip() or "calibration.npz"
+        self._calibration_mode_obj = _CalibrationMode(
+            chessboard_size=(cols, rows),
+            output_path=output,
+        )
+        self._calibration_active = True
+        self._calib_capture_btn.config(state="normal")
+        self._calib_run_btn.config(state="disabled")
+        self._calib_status_var.set(
+            f"Calibration started (board {cols}×{rows}).\n"
+            "Hold the chessboard in view and\n"
+            "click 'Capture frame' to collect\n"
+            f"samples (need {_CALIB_MIN_CAPTURES}/25)."
+        )
+        self._mode_notebook.select(self._calibration_tab)
+
+    def _on_calib_capture(self) -> None:
+        """Request a chessboard-capture on the next frame."""
+        self._calib_capture_flag = True
+
+    def _on_calib_run(self) -> None:
+        """Request running the calibration on the next frame."""
+        self._calib_run_flag = True
+
+    def _update_calibration_display(self) -> None:
+        """Refresh the calibration tab status label."""
+        if self._calibration_mode_obj is None:
+            return
+        count = self._calibration_mode_obj.capture_count
+        if self._calibration_mode_obj.is_calibrated:
+            self._calib_status_var.set(
+                f"Calibration complete!\n"
+                f"Saved to: {self._calib_output_var.get()}"
+            )
+            self._calib_capture_btn.config(state="disabled")
+            self._calib_run_btn.config(state="disabled")
+        elif count >= _CALIB_MIN_CAPTURES:
+            self._calib_status_var.set(
+                f"Captures: {count}/25\n"
+                "Ready to calibrate.\n"
+                "Click 'Run calibration'."
+            )
+            self._calib_run_btn.config(state="normal")
+        else:
+            self._calib_status_var.set(
+                f"Captures: {count}/25\n"
+                "Hold chessboard in view and\n"
+                "click 'Capture frame'."
+            )
 
     def _on_toggle_april(self) -> None:
         """Enable or disable the AprilTag detector."""
@@ -1196,6 +1345,20 @@ class RoboEyeSenseApp:
 
         vis = self.detector.draw_detections(vis, detections)
 
+        # Calibration overlay: run chessboard detection on the live frame
+        if self._calibration_active and self._calibration_mode_obj is not None:
+            key = -1
+            if self._calib_capture_flag:
+                key = ord(" ")
+                self._calib_capture_flag = False
+            elif self._calib_run_flag:
+                key = ord("c")
+                self._calib_run_flag = False
+            vis = self._calibration_mode_obj.run(
+                vis, {"key": key, "headless": False}
+            )
+            self._update_calibration_display()
+
         # Overlay FPS
         cv2.putText(
             vis,
@@ -1406,20 +1569,35 @@ class RoboEyeSenseApp:
     def _toggle_layout(self) -> None:
         """Toggle between normal and compact-camera layouts.
 
-        Normal layout: camera column expands, info panel has fixed width.
-        Compact layout: camera column is fixed at *_COMPACT_CAMERA_WIDTH* px,
-        info panel expands to use the remaining space.
+        Normal layout:  camera (top, col=1) + info (bottom, col=1),
+                        mode panel occupies the full right column (col=2).
+        Compact layout: camera is fixed-width in the upper-right corner (col=2);
+                        controls (col=0) and mode + info (col=1) expand proportionally.
         """
         self._compact_view = not self._compact_view
         if self._compact_view:
-            # Compact: camera fixed; info panel expands
-            self.root.columnconfigure(1, minsize=_COMPACT_CAMERA_WIDTH, weight=0)
-            self.root.columnconfigure(2, minsize=280, weight=1)
+            # ── Compact: camera → upper-right (col=2); rest proportional ──
+            self._canvas.grid(row=0, column=2, sticky="nsew")
+            self._info_frame.grid(row=1, column=1, sticky="nsew")
+            self._mode_frame.grid(row=0, column=1, rowspan=1, sticky="nsew")
+            self._ctrl_frame.grid(row=0, column=0, rowspan=2, sticky="nsew")
+            self.root.columnconfigure(0, minsize=0, weight=1)
+            self.root.columnconfigure(1, weight=1, minsize=0)
+            self.root.columnconfigure(2, minsize=_COMPACT_CAMERA_WIDTH, weight=0)
+            self.root.rowconfigure(0, weight=1)
+            self.root.rowconfigure(1, weight=1)
             self._layout_btn_var.set("Normal view")
         else:
-            # Normal: camera expands; info panel has a fixed minimum
-            self.root.columnconfigure(1, minsize=0, weight=1)
+            # ── Normal: camera+info stacked in col=1; mode panel in col=2 ──
+            self._canvas.grid(row=0, column=1, sticky="nsew")
+            self._info_frame.grid(row=1, column=1, sticky="nsew")
+            self._mode_frame.grid(row=0, column=2, rowspan=2, sticky="nsew")
+            self._ctrl_frame.grid(row=0, column=0, rowspan=2, sticky="nsew")
+            self.root.columnconfigure(0, minsize=200, weight=0)
+            self.root.columnconfigure(1, weight=1, minsize=0)
             self.root.columnconfigure(2, minsize=280, weight=0)
+            self.root.rowconfigure(0, weight=1)
+            self.root.rowconfigure(1, weight=0)
             self._layout_btn_var.set("Compact view")
 
     # ──────────────────────────────────────────────────────────────────────

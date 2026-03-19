@@ -498,10 +498,10 @@ class TestRoboEyeSenseApp:
         assert str(app._slam_save_btn.cget("state")) == "disabled"
 
     def test_mode_notebook_exists(self, app):
-        """The info panel should contain a tabbed notebook."""
+        """The mode panel should contain a tabbed notebook."""
         assert hasattr(app, "_mode_notebook")
-        # There are 3 tabs: Offset, SLAM, and Follow
-        assert app._mode_notebook.index("end") == 3
+        # There are 4 tabs: Offset, SLAM, Follow, and Calibration
+        assert app._mode_notebook.index("end") == 4
 
     def test_slam_mode_switches_to_slam_tab(self, app):
         """Setting SLAM mode should switch the notebook to the SLAM tab."""
