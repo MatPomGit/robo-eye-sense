@@ -141,6 +141,10 @@ def _sharpen_frame(frame: np.ndarray) -> np.ndarray:
 class RoboEyeDetector:
     """All-in-one detector for visual markers and laser spots.
 
+    Combines AprilTag, QR-code, and laser-spot sub-detectors with a
+    centroid tracker into a single processing pipeline suitable for
+    continuous use in a ``while True`` video loop.
+
     Parameters
     ----------
     enable_apriltag:
@@ -170,6 +174,21 @@ class RoboEyeDetector:
     tracker_max_distance:
         Maximum centroid distance for matching unlabeled tracks (used in
         NORMAL mode; adjusted automatically in FAST and ROBUST modes).
+
+    Attributes
+    ----------
+    mode : DetectionMode
+        Current operating mode (NORMAL, FAST, or ROBUST).
+    april_enabled : bool
+        Whether the AprilTag sub-detector is active.
+    qr_enabled : bool
+        Whether the QR-code sub-detector is active.
+    laser_enabled : bool
+        Whether the laser-spot sub-detector is active.
+    laser_detector : Optional[LaserSpotDetector]
+        The active laser-spot detector instance, or ``None``.
+    tag_names : Dict[str, str]
+        Mapping of AprilTag IDs to human-readable names.
     """
 
     def __init__(

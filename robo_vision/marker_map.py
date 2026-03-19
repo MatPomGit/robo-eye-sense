@@ -382,6 +382,16 @@ class SlamCalibrator:
         a default pinhole approximation is used.
     dist_coeffs:
         Lens distortion coefficients.  ``None`` means zero distortion.
+    frame_size:
+        ``(width, height)`` of the input frames in pixels.  Used to
+        compute a default camera matrix when *camera_matrix* is ``None``.
+
+    Attributes
+    ----------
+    marker_map : MarkerMap
+        The current (possibly still growing) marker map.
+    frame_count : int
+        Number of frames processed so far.
     """
 
     def __init__(
