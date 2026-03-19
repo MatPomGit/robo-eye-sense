@@ -207,6 +207,12 @@ class RoboEyeDetector:
         tracker_max_distance: int = 50,
     ) -> None:
         self._april_detector: Optional[april_tag_detector.AprilTagDetector] = None
+        # _april_enabled tracks whether AprilTag detection is active without
+        # destroying the underlying C object.  The pupil_apriltags native
+        # Detector.__del__ corrupts the allocator when called at runtime, so
+        # we must never let the reference count of _april_detector drop to zero
+        # while the process is alive.  Toggling is done via this flag only.
+        self._april_enabled: bool = False
         self._qr_detector: Optional[QRCodeDetector] = None
         self._laser_detector: Optional[LaserSpotDetector] = None
 
@@ -220,6 +226,7 @@ class RoboEyeDetector:
         if enable_apriltag:
             if _apriltags_available():
                 self._april_detector = april_tag_detector.AprilTagDetector()
+                self._april_enabled = True
             else:
                 warnings.warn(
                     "pupil-apriltags not installed – AprilTag detection disabled. "
@@ -293,7 +300,7 @@ class RoboEyeDetector:
     @property
     def april_enabled(self) -> bool:
         """Whether AprilTag detection is currently active."""
-        return self._april_detector is not None
+        return self._april_enabled and self._april_detector is not None
 
     @property
     def qr_enabled(self) -> bool:
@@ -322,15 +329,22 @@ class RoboEyeDetector:
     def enable_april(self) -> bool:
         """Enable the AprilTag detector.  Returns ``True`` on success."""
         if self._april_detector is not None:
+            self._april_enabled = True
             return True
         if not _apriltags_available():
             return False
         self._april_detector = april_tag_detector.AprilTagDetector()
+        self._april_enabled = True
         return True
 
     def disable_april(self) -> None:
-        """Disable the AprilTag detector."""
-        self._april_detector = None
+        """Disable the AprilTag detector.
+
+        The underlying C object is kept alive to avoid a known memory-
+        corruption crash in ``pupil_apriltags.Detector.__del__``.  Only the
+        ``_april_enabled`` flag is cleared so that detection is skipped.
+        """
+        self._april_enabled = False
 
     def enable_qr(self) -> None:
         """Enable the QR-code detector."""
@@ -403,7 +417,7 @@ class RoboEyeDetector:
             frame = _sharpen_frame(frame)
 
         if self._threaded and (
-            (self._april_detector is not None)
+            (self._april_enabled and self._april_detector is not None)
             + (self._qr_detector is not None)
         ) >= 2:
             detections = self._run_detectors_threaded(frame)
@@ -427,9 +441,9 @@ class RoboEyeDetector:
         This is the common detection step shared by every pipeline mode.
         """
         detections: List[Detection] = []
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        if self._april_detector is not None:
+        if self._april_enabled and self._april_detector is not None:
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             april_detections = self._april_detector.detect(gray)
             # Enrich AprilTag detections with human-readable names
             if self._tag_names:
@@ -458,11 +472,11 @@ class RoboEyeDetector:
         * Only one detector enabled: negligible benefit (thread overhead).
         """
         detections: List[Detection] = []
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         futures: list[tuple[str, Future]] = []
 
         with ThreadPoolExecutor(max_workers=2) as pool:
-            if self._april_detector is not None:
+            if self._april_enabled and self._april_detector is not None:
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 futures.append(
                     ("april", pool.submit(self._april_detector.detect, gray))
                 )
