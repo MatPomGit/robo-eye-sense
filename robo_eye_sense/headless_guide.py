@@ -299,7 +299,14 @@ def print_headless_guide(
             lines.append(f"  Tag names file not found: {tag_names_file}")
 
     if merged_names:
-        for tid in sorted(merged_names, key=lambda x: int(x) if x.isdigit() else x):
+        def _sort_key(x: str) -> tuple:
+            """Sort numeric IDs numerically, others lexicographically."""
+            try:
+                return (0, int(x))
+            except ValueError:
+                return (1, x)
+
+        for tid in sorted(merged_names, key=_sort_key):
             category = ""
             if tid.isdigit():
                 category = f" [{classify_tag(int(tid))}]"

@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import json
 import os
 import sys
 import time
@@ -326,7 +327,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
             try:
                 file_names = load_tag_names_from_file(args.tag_names_file)
                 tag_names.update(file_names)
-            except (ValueError, TypeError, OSError) as exc:
+            except (json.JSONDecodeError, TypeError, OSError) as exc:
                 print(
                     f"WARNING: could not load tag names from "
                     f"{args.tag_names_file!r}: {exc}",
