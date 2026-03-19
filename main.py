@@ -60,7 +60,9 @@ import json
 import logging
 import os
 import sys
+import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from robo_vision import APP_NAME, RoboEyeDetector, __version__
@@ -523,6 +525,342 @@ def _validate_startup(args: argparse.Namespace) -> list[str]:
                 )
 
     return warnings_list
+
+
+class RoboVisionController:
+    """Programmatic interface for controlling the robo-vision detection loop.
+
+    Allows an external program to start, stop, and receive results from the
+    robo-vision pipeline without using the CLI.
+
+    Parameters
+    ----------
+    source : int or str
+        Camera index or path/URL to a video file or stream (default: 0).
+    width : int
+        Frame width in pixels (default: 640).
+    height : int
+        Frame height in pixels (default: 480).
+    mode : str
+        Operating mode – one of ``'basic'``, ``'offset'``, ``'slam'``,
+        ``'calibration'``, ``'box'``, ``'pose'``, or ``'follow'``
+        (default: ``'basic'``).
+    quality : str
+        Detection quality: ``'low'``, ``'normal'``, or ``'high'``
+        (default: ``'normal'``).
+    enable_apriltag : bool
+        Enable AprilTag detection (default: ``True``).
+    enable_qr : bool
+        Enable QR-code detection (default: ``False``).
+    enable_laser : bool
+        Enable laser-spot detection (default: ``False``).
+    laser_brightness_threshold : int
+        Lower brightness threshold for laser-spot detection (default: 240).
+    laser_brightness_threshold_max : int
+        Upper brightness threshold for laser-spot detection (default: 255).
+    laser_channels : str
+        Colour channels used for laser detection, e.g. ``'rgb'``
+        (default: ``'rgb'``).
+    tag_names : dict, optional
+        Mapping of AprilTag ID strings to human-readable names.
+    on_detections : callable, optional
+        Callback invoked every processed frame with signature
+        ``(frame_idx: int, detections: list, fps: float) -> None``.
+        *detections* is a :class:`list` of
+        :class:`robo_vision.results.Detection` objects.
+    tag_size : float
+        Physical side length of AprilTags in metres (default: 0.05).
+    follow_marker : str, optional
+        AprilTag ID to follow in ``'follow'`` mode.
+    follow_box : bool
+        Fall back to box tracking in ``'follow'`` mode (default: ``False``).
+    target_distance : float
+        Desired distance to the tracked object in metres (default: 0.5).
+    calibration_path : str
+        Path to a camera calibration ``.npz`` file
+        (default: ``'calibration.npz'``).
+    map_file : str, optional
+        Path to save/load the SLAM marker map.
+    record : str, optional
+        Path for recording the processed video to a file.
+    sensitivity : int
+        AprilTag detection sensitivity for pose mode (0–100, default: 50).
+
+    Examples
+    --------
+    Run the basic detection loop in a background thread and receive
+    per-frame results via a callback::
+
+        import time
+        from main import RoboVisionController
+
+        def on_detections(frame_idx, detections, fps):
+            for d in detections:
+                print(f"[{frame_idx}] {d}")
+
+        ctrl = RoboVisionController(
+            source=0,
+            on_detections=on_detections,
+        )
+        ctrl.start()
+        time.sleep(10)
+        ctrl.stop()
+
+    Or run synchronously (blocking) in the current thread::
+
+        ctrl = RoboVisionController(source="video.mp4", mode="basic")
+        exit_code = ctrl.run()
+    """
+
+    def __init__(
+        self,
+        source: int | str = 0,
+        width: int = 640,
+        height: int = 480,
+        mode: str = "basic",
+        quality: str = "normal",
+        enable_apriltag: bool = True,
+        enable_qr: bool = False,
+        enable_laser: bool = False,
+        laser_brightness_threshold: int = 240,
+        laser_brightness_threshold_max: int = 255,
+        laser_channels: str = "rgb",
+        tag_names: dict | None = None,
+        on_detections: Callable | None = None,
+        tag_size: float = _DEFAULT_TAG_SIZE,
+        follow_marker: str | None = None,
+        follow_box: bool = False,
+        target_distance: float = 0.5,
+        calibration_path: str = "calibration.npz",
+        map_file: str | None = None,
+        record: str | None = None,
+        sensitivity: int = 50,
+    ) -> None:
+        if mode not in _MODES:
+            raise ValueError(
+                f"mode must be one of {_MODES!r}, got {mode!r}"
+            )
+        if quality not in _QUALITY_TO_DETECTION_MODE:
+            raise ValueError(
+                f"quality must be one of "
+                f"{list(_QUALITY_TO_DETECTION_MODE)!r}, got {quality!r}"
+            )
+
+        self._source = source
+        self._width = width
+        self._height = height
+        self._mode = mode
+        self._quality = quality
+        self._enable_apriltag = enable_apriltag
+        self._enable_qr = enable_qr
+        self._enable_laser = enable_laser
+        self._laser_threshold = laser_brightness_threshold
+        self._laser_threshold_max = laser_brightness_threshold_max
+        self._laser_channels = laser_channels
+        self._tag_names: dict[str, str] = dict(tag_names) if tag_names else {}
+        self.on_detections = on_detections
+        self._tag_size = tag_size
+        self._follow_marker = follow_marker
+        self._follow_box = follow_box
+        self._target_distance = target_distance
+        self._calibration_path = calibration_path
+        self._map_file = map_file
+        self._record = record
+        self._sensitivity = sensitivity
+
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._exit_code: int = 0
+
+    @property
+    def is_running(self) -> bool:
+        """Return ``True`` if the detection loop is currently active."""
+        return self._thread is not None and self._thread.is_alive()
+
+    def start(self) -> None:
+        """Start the detection loop in a background daemon thread.
+
+        Raises
+        ------
+        RuntimeError
+            If the controller is already running.
+        """
+        if self.is_running:
+            raise RuntimeError("RoboVisionController is already running.")
+        self._stop_event.clear()
+        self._exit_code = 0
+        self._thread = threading.Thread(
+            target=self._run_loop, daemon=True, name="RoboVisionController"
+        )
+        self._thread.start()
+
+    def stop(self, timeout: float = 5.0) -> None:
+        """Signal the detection loop to stop and wait for it to finish.
+
+        Parameters
+        ----------
+        timeout : float
+            Maximum seconds to wait for the background thread to join
+            (default: 5.0).  Pass ``None`` to wait indefinitely.
+        """
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=timeout)
+            self._thread = None
+
+    def run(self) -> int:
+        """Run the detection loop in the current thread (blocking).
+
+        Returns
+        -------
+        int
+            Exit code – 0 for success, 1 for error.
+        """
+        self._stop_event.clear()
+        self._exit_code = self._run_loop()
+        return self._exit_code
+
+    def _run_loop(self) -> int:
+        """Internal detection loop; returns the process exit code."""
+        detection_mode = _QUALITY_TO_DETECTION_MODE[self._quality]
+
+        detector = RoboEyeDetector(
+            enable_apriltag=self._enable_apriltag,
+            enable_qr=self._enable_qr,
+            enable_laser=self._enable_laser,
+            mode=detection_mode,
+            laser_brightness_threshold=self._laser_threshold,
+            laser_brightness_threshold_max=self._laser_threshold_max,
+            tag_names=self._tag_names,
+            laser_channels=self._laser_channels,
+        )
+
+        try:
+            cam = Camera(
+                source=self._source,
+                width=self._width,
+                height=self._height,
+            )
+        except RuntimeError as exc:
+            logger.error("RoboVisionController: %s", exc)
+            return 1
+
+        active_mode = None
+        if self._mode in ("calibration", "box", "pose", "follow"):
+            from modes import BoxMode, CalibrationMode, FollowMode, PoseMode
+
+            if self._mode == "calibration":
+                active_mode = CalibrationMode(
+                    output_path=self._calibration_path,
+                )
+            elif self._mode == "box":
+                active_mode = BoxMode()
+            elif self._mode == "pose":
+                active_mode = PoseMode(
+                    tag_size=self._tag_size,
+                    calibration_path=self._calibration_path,
+                    sensitivity=self._sensitivity,
+                )
+            elif self._mode == "follow":
+                active_mode = FollowMode(
+                    follow_marker=self._follow_marker,
+                    follow_box=self._follow_box,
+                    target_distance=self._target_distance,
+                    tag_size=self._tag_size,
+                    calibration_path=self._calibration_path,
+                )
+
+        recorder = None
+        if self._record:
+            from robo_vision.recorder import VideoRecorder
+
+            recorder = VideoRecorder(
+                self._record,
+                width=cam.actual_width,
+                height=cam.actual_height,
+                fps=cam.actual_fps or 30.0,
+            )
+
+        fps_counter = 0
+        fps_display = 0.0
+        t_fps = time.perf_counter()
+        frame_idx = 0
+
+        logger.info(
+            "RoboVisionController: starting (mode=%s, quality=%s).",
+            self._mode, self._quality,
+        )
+
+        try:
+            with cam:
+                if recorder is not None:
+                    recorder.start()
+
+                while not self._stop_event.is_set():
+                    frame = cam.read()
+                    if frame is None:
+                        break
+
+                    frame_idx += 1
+
+                    fps_counter += 1
+                    t_now = time.perf_counter()
+                    elapsed = t_now - t_fps
+                    if elapsed >= 1.0:
+                        fps_display = fps_counter / elapsed
+                        fps_counter = 0
+                        t_fps = t_now
+
+                    try:
+                        detections = detector.process_frame(frame)
+                        if active_mode is not None:
+                            ctx = {
+                                "headless": True,
+                                "key": -1,
+                                "frame_idx": frame_idx,
+                                "fps": fps_display,
+                            }
+                            vis = active_mode.run(frame, ctx)
+                        else:
+                            vis = frame
+                    except cv2.error as exc:
+                        logger.error(
+                            "RoboVisionController: OpenCV error in %s mode: %s",
+                            self._mode, exc,
+                        )
+                        continue
+                    except (ValueError, TypeError) as exc:
+                        logger.error(
+                            "RoboVisionController: error in %s mode: %s",
+                            self._mode, exc,
+                        )
+                        continue
+
+                    if self.on_detections is not None:
+                        try:
+                            self.on_detections(frame_idx, detections, fps_display)
+                        except (RuntimeError, ValueError, TypeError, OSError) as exc:
+                            logger.warning(
+                                "RoboVisionController: on_detections callback "
+                                "raised an exception: %s", exc,
+                            )
+
+                    if recorder is not None:
+                        recorder.write_frame(vis)
+
+                logger.info(
+                    "RoboVisionController: stream ended (frames=%d).", frame_idx
+                )
+        except KeyboardInterrupt:
+            logger.info("RoboVisionController: interrupted by user.")
+        except RuntimeError as exc:
+            logger.error("RoboVisionController: %s", exc)
+            return 1
+        finally:
+            if recorder is not None:
+                recorder.stop()
+
+        return 0
 
 
 def main(argv: list[str] | None = None) -> int:  # noqa: C901
