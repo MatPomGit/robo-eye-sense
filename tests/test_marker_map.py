@@ -22,9 +22,11 @@ from robo_vision.marker_map import (
     SlamCalibrator,
     _angle_average,
     _default_camera_matrix,
+    _estimate_pose_multi_marker,
     _euler_to_rotation_matrix,
     _mean_angles,
     _rotation_matrix_to_euler,
+    _solve_marker_pose,
 )
 from robo_vision.results import Detection, DetectionType
 
@@ -588,3 +590,191 @@ class TestSlamCalibratorTagSize:
 
         # Depth (z) should be larger for the physically larger tag
         assert pos_large[2] > pos_small[2]
+
+
+# ---------------------------------------------------------------------------
+# _solve_marker_pose — RANSAC PnP + LM refinement
+# ---------------------------------------------------------------------------
+
+
+class TestSolveMarkerPoseRansac:
+    """Verify that _solve_marker_pose uses RANSAC PnP and returns valid results."""
+
+    def test_returns_valid_pose(self):
+        det = _april("1", (320, 240), half_size=30)
+        rvec, tvec, err = _solve_marker_pose(det.corners, 5.0, None)
+        assert rvec is not None
+        assert tvec is not None
+        assert err is not None
+        assert err >= 0.0
+
+    def test_too_few_corners_returns_none(self):
+        rvec, tvec, err = _solve_marker_pose([(0, 0), (1, 1)], 5.0, None)
+        assert rvec is None
+        assert tvec is None
+        assert err is None
+
+    def test_custom_camera_matrix(self):
+        cam_mtx = np.array([
+            [500.0, 0.0, 320.0],
+            [0.0, 500.0, 240.0],
+            [0.0, 0.0, 1.0],
+        ], dtype=np.float64)
+        det = _april("1", (320, 240), half_size=30)
+        rvec, tvec, err = _solve_marker_pose(det.corners, 5.0, cam_mtx)
+        assert rvec is not None
+        assert tvec is not None
+
+    def test_rvec_tvec_shapes(self):
+        det = _april("1", (320, 240), half_size=30)
+        rvec, tvec, _ = _solve_marker_pose(det.corners, 5.0, None)
+        assert rvec.shape == (3,)
+        assert tvec.shape == (3,)
+
+    def test_depth_scales_with_tag_size(self):
+        """Larger physical tag at same pixel size → greater depth estimate."""
+        det = _april("1", (320, 240), half_size=30)
+        _, tvec_small, _ = _solve_marker_pose(det.corners, 2.5, None)
+        _, tvec_large, _ = _solve_marker_pose(det.corners, 10.0, None)
+        assert tvec_large[2] > tvec_small[2]
+
+    def test_reprojection_error_is_low(self):
+        """With ideal synthetic corners the reprojection error should be small."""
+        det = _april("1", (320, 240), half_size=30)
+        _, _, err = _solve_marker_pose(det.corners, 5.0, None)
+        assert err < 2.0  # pixels
+
+
+# ---------------------------------------------------------------------------
+# _estimate_pose_multi_marker — multi-marker RANSAC PnP
+# ---------------------------------------------------------------------------
+
+
+class TestEstimatePoseMultiMarker:
+    """Tests for the multi-marker RANSAC PnP helper."""
+
+    def _make_map_and_dets(self):
+        """Create a map with two markers and matching detections."""
+        markers = {
+            "1": MarkerPose3D(
+                marker_id="1",
+                position=(0.0, 0.0, 50.0),
+                orientation=(0.0, 0.0, 0.0),
+            ),
+            "2": MarkerPose3D(
+                marker_id="2",
+                position=(30.0, 0.0, 50.0),
+                orientation=(0.0, 0.0, 0.0),
+            ),
+        }
+        dets = [
+            _april("1", (250, 240), half_size=25),
+            _april("2", (450, 240), half_size=25),
+        ]
+        return markers, dets
+
+    def test_returns_robot_pose(self):
+        markers, dets = self._make_map_and_dets()
+        result = _estimate_pose_multi_marker(dets, markers, 5.0, None)
+        assert result is not None
+        assert isinstance(result, RobotPose3D)
+        assert result.visible_markers >= 1
+
+    def test_reprojection_error_present(self):
+        markers, dets = self._make_map_and_dets()
+        result = _estimate_pose_multi_marker(dets, markers, 5.0, None)
+        assert result is not None
+        assert result.reprojection_error is not None
+        assert result.reprojection_error >= 0.0
+
+    def test_orientation_returned(self):
+        markers, dets = self._make_map_and_dets()
+        result = _estimate_pose_multi_marker(dets, markers, 5.0, None)
+        assert result is not None
+        assert len(result.orientation) == 3
+
+    def test_custom_camera_matrix(self):
+        markers, dets = self._make_map_and_dets()
+        cam_mtx = np.array([
+            [500.0, 0.0, 320.0],
+            [0.0, 500.0, 240.0],
+            [0.0, 0.0, 1.0],
+        ], dtype=np.float64)
+        result = _estimate_pose_multi_marker(dets, markers, 5.0, cam_mtx)
+        assert result is not None
+        assert result.visible_markers >= 1
+
+
+# ---------------------------------------------------------------------------
+# MarkerMap.estimate_robot_pose — multi-marker path
+# ---------------------------------------------------------------------------
+
+
+class TestEstimateRobotPoseMultiMarker:
+    """Verify estimate_robot_pose uses multi-marker RANSAC when ≥ 2 markers."""
+
+    def test_two_markers_produces_pose(self):
+        mm = MarkerMap()
+        mm.add(MarkerPose3D(
+            marker_id="1",
+            position=(0.0, 0.0, 50.0),
+            orientation=(0.0, 0.0, 0.0),
+        ))
+        mm.add(MarkerPose3D(
+            marker_id="2",
+            position=(30.0, 0.0, 50.0),
+            orientation=(0.0, 0.0, 0.0),
+        ))
+        dets = [
+            _april("1", (250, 240), half_size=25),
+            _april("2", (450, 240), half_size=25),
+        ]
+        pose = mm.estimate_robot_pose(dets, tag_size_cm=5.0)
+        assert pose.visible_markers >= 1
+        assert pose.reprojection_error is not None
+
+    def test_single_marker_still_works(self):
+        """With only one known marker, fallback to single-marker PnP."""
+        mm = MarkerMap()
+        mm.add(MarkerPose3D(
+            marker_id="1",
+            position=(0.0, 0.0, 50.0),
+            orientation=(0.0, 0.0, 0.0),
+        ))
+        det = _april("1", (320, 240), half_size=30)
+        pose = mm.estimate_robot_pose([det], tag_size_cm=5.0)
+        assert pose.visible_markers == 1
+        assert pose.reprojection_error is not None
+
+    def test_mixed_known_unknown_markers(self):
+        """Only mapped markers contribute to the pose estimate."""
+        mm = MarkerMap()
+        mm.add(MarkerPose3D(
+            marker_id="1",
+            position=(0.0, 0.0, 50.0),
+            orientation=(0.0, 0.0, 0.0),
+        ))
+        dets = [
+            _april("1", (250, 240), half_size=25),
+            _april("999", (450, 240), half_size=25),
+        ]
+        pose = mm.estimate_robot_pose(dets, tag_size_cm=5.0)
+        assert pose.visible_markers == 1
+
+    def test_three_markers_uses_multi_marker(self):
+        """Three visible mapped markers should use multi-marker RANSAC."""
+        mm = MarkerMap()
+        for i, x_off in enumerate([0, 30, 60]):
+            mm.add(MarkerPose3D(
+                marker_id=str(i + 1),
+                position=(float(x_off), 0.0, 50.0),
+                orientation=(0.0, 0.0, 0.0),
+            ))
+        dets = [
+            _april("1", (200, 240), half_size=20),
+            _april("2", (350, 240), half_size=20),
+            _april("3", (500, 240), half_size=20),
+        ]
+        pose = mm.estimate_robot_pose(dets, tag_size_cm=5.0)
+        assert pose.visible_markers >= 1
+        assert pose.reprojection_error is not None

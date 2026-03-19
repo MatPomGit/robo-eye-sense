@@ -12,7 +12,8 @@ Workflow
    and (optionally) the camera intrinsic matrix.
 2. Feed frames through :meth:`SlamCalibrator.process_detections` — this runs
    AprilTag detection, estimates the pose of every visible marker with
-   ``cv2.solvePnP``, and fuses observations into the growing map.
+   ``cv2.solvePnPRansac`` (followed by Levenberg-Marquardt refinement),
+   and fuses observations into the growing map.
 3. After enough observations, call :meth:`SlamCalibrator.marker_map` to
    obtain the finished :class:`MarkerMap`.
 4. The map can be saved to / loaded from a JSON file for later re-use.
@@ -22,8 +23,8 @@ Workflow
 The module is designed so that the lightweight data classes
 (:class:`MarkerPose3D`, :class:`RobotPose3D`, :class:`MarkerMap`) have
 **no OpenCV dependency** and can be imported without ``cv2``.  Only
-:class:`SlamCalibrator` and the helper functions that wrap ``solvePnP``
-require OpenCV.
+:class:`SlamCalibrator` and the helper functions that wrap
+``solvePnPRansac`` require OpenCV.
 """
 
 from __future__ import annotations
@@ -35,6 +36,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .results import Detection, DetectionType
+
+# RANSAC PnP tuning parameters
+_RANSAC_REPROJ_THRESHOLD = 8.0   # max reprojection error (px) to accept an inlier
+_RANSAC_ITER_SINGLE = 100        # RANSAC iterations for single-marker PnP
+_RANSAC_ITER_MULTI = 200         # RANSAC iterations for multi-marker PnP
+_CORNERS_PER_MARKER = 4          # corners produced by each AprilTag detection
 
 
 # ---------------------------------------------------------------------------
@@ -264,10 +271,15 @@ class MarkerMap:
     ) -> RobotPose3D:
         """Estimate the robot's 3-D pose given current *detections*.
 
-        For each detected AprilTag that exists in the map, the inverse of
-        the marker's camera-relative pose is combined with the marker's
-        known world pose.  When multiple markers are visible the individual
-        estimates are averaged for robustness.
+        When two or more mapped markers are visible the function uses
+        **multi-marker RANSAC PnP**: all 3-D ↔ 2-D point correspondences
+        from every known marker are fed into a single
+        ``cv2.solvePnPRansac`` call (with Levenberg-Marquardt refinement).
+        RANSAC rejects outlier markers automatically, and the combined
+        optimisation is more accurate than averaging per-marker estimates.
+
+        When only one mapped marker is visible the function falls back
+        to a single-marker ``solvePnPRansac`` call.
 
         Parameters
         ----------
@@ -298,10 +310,8 @@ class MarkerMap:
         else:
             cam_mtx = None
 
-        positions: List[Tuple[float, float, float]] = []
-        orientations: List[Tuple[float, float, float]] = []
-        errors: List[float] = []
-
+        # Collect valid detections that exist in the map
+        valid_dets: List[Detection] = []
         for det in detections:
             if det.detection_type != DetectionType.APRIL_TAG:
                 continue
@@ -309,7 +319,25 @@ class MarkerMap:
                 continue
             if len(det.corners) < 4:
                 continue
+            valid_dets.append(det)
 
+        if not valid_dets:
+            return RobotPose3D()
+
+        # --- Multi-marker RANSAC PnP (≥ 2 markers) ---
+        if len(valid_dets) >= 2:
+            result = _estimate_pose_multi_marker(
+                valid_dets, self._markers, tag_size_cm, cam_mtx,
+            )
+            if result is not None:
+                return result
+
+        # --- Single-marker fallback ---
+        positions: List[Tuple[float, float, float]] = []
+        orientations: List[Tuple[float, float, float]] = []
+        errors: List[float] = []
+
+        for det in valid_dets:
             marker_world = self._markers[det.identifier]
 
             rvec, tvec, err = _solve_marker_pose(
@@ -569,7 +597,11 @@ def _solve_marker_pose(
     tag_size_cm: float,
     camera_matrix: Any,
 ) -> Tuple[Any, Any, Optional[float]]:
-    """Estimate the 6-DoF pose of a single marker via ``cv2.solvePnP``.
+    """Estimate the 6-DoF pose of a single marker via ``cv2.solvePnPRansac``.
+
+    Uses RANSAC-based PnP for robustness against noisy corner detections,
+    followed by Levenberg-Marquardt refinement (``cv2.solvePnPRefineLM``)
+    for sub-pixel accuracy.
 
     Returns ``(rvec, tvec, reprojection_error)`` or ``(None, None, None)``
     on failure.
@@ -604,11 +636,22 @@ def _solve_marker_pose(
 
     dist = _np.zeros(4, dtype=_np.float64)
 
-    success, rvec, tvec = _cv2.solvePnP(
+    success, rvec, tvec, _inliers = _cv2.solvePnPRansac(
         obj_pts, img_pts, camera_matrix, dist,
+        iterationsCount=_RANSAC_ITER_SINGLE,
+        reprojectionError=_RANSAC_REPROJ_THRESHOLD,
+        flags=_cv2.SOLVEPNP_ITERATIVE,
     )
     if not success:
         return None, None, None
+
+    # Levenberg-Marquardt refinement for sub-pixel accuracy
+    try:
+        rvec, tvec = _cv2.solvePnPRefineLM(
+            obj_pts, img_pts, camera_matrix, dist, rvec, tvec,
+        )
+    except (_cv2.error, AttributeError):
+        pass  # keep RANSAC estimate
 
     # Compute reprojection error
     proj, _ = _cv2.projectPoints(obj_pts, rvec, tvec, camera_matrix, dist)
@@ -617,6 +660,104 @@ def _solve_marker_pose(
     )))
 
     return rvec.flatten(), tvec.flatten(), err
+
+
+def _estimate_pose_multi_marker(
+    detections: List[Detection],
+    markers: Dict[str, MarkerPose3D],
+    tag_size_cm: float,
+    camera_matrix: Any,
+) -> Optional[RobotPose3D]:
+    """Estimate the camera pose using all visible mapped markers at once.
+
+    Collects 3-D ↔ 2-D correspondences from every *detection* whose
+    marker ID exists in *markers*, transforms the 3-D corners to the
+    shared world frame, and solves a single ``cv2.solvePnPRansac`` call
+    followed by Levenberg-Marquardt refinement.
+
+    Returns ``None`` if the solve fails (caller should fall back to the
+    per-marker approach).
+    """
+    try:
+        import cv2 as _cv2
+        import numpy as _np
+    except ImportError:
+        return None
+
+    half = tag_size_cm / 2.0
+    local_corners = _np.array([
+        [-half, -half, 0.0],
+        [half, -half, 0.0],
+        [half,  half, 0.0],
+        [-half,  half, 0.0],
+    ], dtype=_np.float64)
+
+    all_obj: List[_np.ndarray] = []
+    all_img: List[_np.ndarray] = []
+    used_ids: List[str] = []
+
+    for det in detections:
+        assert det.identifier is not None
+        mw = markers[det.identifier]
+        R_mw = _euler_to_rotation_matrix(*mw.orientation)
+        t_mw = _np.array(mw.position, dtype=_np.float64)
+
+        for i in range(4):
+            world_pt = R_mw @ local_corners[i] + t_mw
+            all_obj.append(world_pt)
+            all_img.append(_np.array(det.corners[i], dtype=_np.float64))
+        used_ids.append(det.identifier)
+
+    obj_pts = _np.array(all_obj, dtype=_np.float64)
+    img_pts = _np.array(all_img, dtype=_np.float64)
+
+    if camera_matrix is None:
+        default = _default_camera_matrix(640, 480)
+        camera_matrix = _np.array(default, dtype=_np.float64)
+
+    dist = _np.zeros(4, dtype=_np.float64)
+
+    success, rvec, tvec, inliers = _cv2.solvePnPRansac(
+        obj_pts, img_pts, camera_matrix, dist,
+        iterationsCount=_RANSAC_ITER_MULTI,
+        reprojectionError=_RANSAC_REPROJ_THRESHOLD,
+        flags=_cv2.SOLVEPNP_ITERATIVE,
+    )
+    if not success:
+        return None
+
+    # Levenberg-Marquardt refinement
+    try:
+        rvec, tvec = _cv2.solvePnPRefineLM(
+            obj_pts, img_pts, camera_matrix, dist, rvec, tvec,
+        )
+    except (_cv2.error, AttributeError):
+        pass
+
+    # Camera position and orientation in world frame
+    R_wc, _ = _cv2.Rodrigues(rvec)
+    cam_pos = (-R_wc.T @ tvec).flatten()
+    R_cw = R_wc.T
+    r, p, y = _rotation_matrix_to_euler(R_cw)
+
+    # Reprojection error
+    proj, _ = _cv2.projectPoints(obj_pts, rvec, tvec, camera_matrix, dist)
+    err = float(_np.mean(_np.linalg.norm(
+        proj.reshape(-1, 2) - img_pts.reshape(-1, 2), axis=1,
+    )))
+
+    n_markers = len(used_ids)
+    if inliers is not None:
+        n_markers = len(set(
+            idx // _CORNERS_PER_MARKER for idx in inliers.flatten()
+        ))
+
+    return RobotPose3D(
+        position=(float(cam_pos[0]), float(cam_pos[1]), float(cam_pos[2])),
+        orientation=(r, p, y),
+        visible_markers=n_markers,
+        reprojection_error=err,
+    )
 
 
 # ---------------------------------------------------------------------------
