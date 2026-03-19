@@ -65,6 +65,7 @@ from .auto_scenario import AutoFollowResult, AutoFollowScenario
 from .detector import RoboEyeDetector, _compute_orientation
 from .marker_map import MarkerPose3D, RobotPose3D, SlamCalibrator
 from .offset_scenario import CameraOffsetScenario, OffsetResult
+from .overlay import OverlayRenderer
 from .recorder import VideoRecorder
 from .results import Detection, DetectionMode, DetectionType
 
@@ -338,6 +339,14 @@ class RoboEyeSenseApp:
         )
         self._fps_target_var = tk.StringVar(value="30")
 
+        # On-screen overlay renderer
+        self._overlay = OverlayRenderer(
+            enabled=True,
+            mode=self._mode_var.get().lower(),
+            quality=self._quality_var.get().lower(),
+            enabled_detectors=self._initial_detector_names(),
+        )
+
         # Build the UI
         self._build_ui()
 
@@ -348,6 +357,32 @@ class RoboEyeSenseApp:
         self.root.bind("<Control-Key-1>", lambda _e: self._set_quality(DetectionMode.FAST))
         self.root.bind("<Control-Key-2>", lambda _e: self._set_quality(DetectionMode.NORMAL))
         self.root.bind("<Control-Key-3>", lambda _e: self._set_quality(DetectionMode.ROBUST))
+
+    # ──────────────────────────────────────────────────────────────────────
+    # Overlay helpers
+    # ──────────────────────────────────────────────────────────────────────
+
+    def _initial_detector_names(self) -> List[str]:
+        """Return a list of enabled detector display names at startup."""
+        names: List[str] = []
+        if self._enable_april.get():
+            names.append("AprilTags")
+        if self._enable_qr.get():
+            names.append("QR codes")
+        if self._enable_laser.get():
+            names.append("Laser spots")
+        return names
+
+    def _overlay_detector_names(self) -> List[str]:
+        """Return the current list of enabled detector display names."""
+        names: List[str] = []
+        if self.detector.april_enabled:
+            names.append("AprilTags")
+        if self.detector.qr_enabled:
+            names.append("QR codes")
+        if self.detector.laser_enabled:
+            names.append("Laser spots")
+        return names
 
     # ──────────────────────────────────────────────────────────────────────
     # UI construction
@@ -1068,6 +1103,7 @@ class RoboEyeSenseApp:
         # Update the description label and info-panel indicator
         self._quality_desc_var.set(_QUALITY_DESCRIPTIONS.get(new_mode, ""))
         self._info_quality_var.set(label)
+        self._overlay.quality = label.lower()
 
     # ── Mode callbacks ──────────────────────────────────────────────────────
 
@@ -1075,6 +1111,7 @@ class RoboEyeSenseApp:
         """Switch to the selected mode."""
         new_mode = self._mode_var.get()
         self._mode_changing = True
+        self._overlay.mode = new_mode.lower()
         try:
             # Stop all currently active modes
             self._stop_all_modes()

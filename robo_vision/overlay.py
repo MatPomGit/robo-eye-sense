@@ -68,6 +68,33 @@ class OverlayRenderer:
     def enabled(self, value: bool) -> None:
         self._enabled = value
 
+    @property
+    def mode(self) -> str:
+        """Current operating mode name."""
+        return self._mode
+
+    @mode.setter
+    def mode(self, value: str) -> None:
+        self._mode = value
+
+    @property
+    def quality(self) -> str:
+        """Current quality setting."""
+        return self._quality
+
+    @quality.setter
+    def quality(self, value: str) -> None:
+        self._quality = value
+
+    @property
+    def enabled_detectors(self) -> List[str]:
+        """List of enabled detector names."""
+        return self._enabled_detectors
+
+    @enabled_detectors.setter
+    def enabled_detectors(self, value: List[str]) -> None:
+        self._enabled_detectors = value
+
     def set_recording(self, active: bool) -> None:
         """Update the recording state for the REC indicator."""
         if active and not self._recording:
