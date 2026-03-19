@@ -59,6 +59,7 @@ import io
 import os
 import sys
 import time
+from pathlib import Path
 
 from robo_eye_sense import APP_NAME, RoboEyeDetector, __version__
 from robo_eye_sense.camera import Camera
@@ -664,7 +665,12 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
 
                 # Save marker map
                 mmap = calibrator.marker_map
-                map_path = args.map_file or "marker_map.json"
+                if args.map_file:
+                    map_path = args.map_file
+                else:
+                    maps_dir = Path(__file__).resolve().parent / "maps"
+                    maps_dir.mkdir(exist_ok=True)
+                    map_path = str(maps_dir / "marker_map.json")
                 mmap.save(map_path)
                 print(f"\n{'='*50}")
                 print("SLAM calibration result")

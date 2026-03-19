@@ -1073,8 +1073,11 @@ class RoboEyeSenseApp:
             return
         from tkinter import filedialog
 
+        maps_dir = Path(__file__).resolve().parent.parent / "maps"
+        maps_dir.mkdir(exist_ok=True)
         path = filedialog.asksaveasfilename(
             title="Save marker map as",
+            initialdir=str(maps_dir),
             defaultextension=".json",
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
         )
@@ -1101,14 +1104,14 @@ class RoboEyeSenseApp:
             self._start_recording()
 
     def _start_recording(self) -> None:
-        """Begin recording to a timestamped file in the 'video' directory."""
+        """Begin recording to a timestamped file in the 'videos' directory."""
         if self._record_path:
             path = self._record_path
             self._record_path = None  # use only once from CLI
         else:
-            # Auto-generate a timestamped filename inside the 'video' folder
+            # Auto-generate a timestamped filename inside the 'videos' folder
             # located in the project root directory (next to main.py).
-            video_dir = Path(__file__).resolve().parent.parent / "video"
+            video_dir = Path(__file__).resolve().parent.parent / "videos"
             video_dir.mkdir(exist_ok=True)
             ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             path = str(video_dir / f"recording_{ts}.mp4")
