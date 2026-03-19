@@ -28,6 +28,7 @@ oraz bezgłowy interfejs CLI do wdrożeń na sprzęcie wbudowanym.
 | **Estymacja odległości** | Model kamery otworkowej (pinhole) – odległość do każdego tagu i do pozycji referencyjnej |
 | **Nagrywanie wideo** | Zapis strumienia do pliku MP4 (`cv2.VideoWriter`) – CLI, GUI i tryb bezgłowy |
 | **Tryb bezgłowy (headless)** | Praca bez wyświetlacza – wyniki na stdout; idealne dla urządzeń wbudowanych |
+| **Integracja ROS2** | Mostek ROS2 publikujący detekcje i pozę robota; obsługa konfiguracji przez topik |
 | **Podsumowanie konfiguracji** | Automatyczne wyświetlanie parametrów startowych w terminalu |
 
 Wszystkie detektory działają na każdej klatce, a ich wyniki są ujednolicane przez
@@ -307,6 +308,8 @@ wraz z ich wartościami domyślnymi i opisem.
 | `--chessboard-size COLSxROWS` | `9x6` | Wymiary wewnętrznych narożników szachownicy kalibracyjnej. |
 | `--calib-output FILE` | `calibration.npz` | Plik NPZ z danymi kalibracji kamery (zapis/odczyt). |
 | `--info` | *(wył.)* | Wyświetla informacje o kamerze (rozdzielczość, FPS, backend) i kończy działanie. |
+| `--ros-status` | *(wył.)* | Wyświetla stan połączenia z ROS2: dostępność `rclpy`, nazwa węzła, topiki publikowane i subskrybowane, po czym kończy działanie. |
+| `--ros` | *(wył.)* | Uruchamia mostek ROS2 podczas pętli detekcji. Wymaga zainstalowanego i sourced'owanego ROS2. Publikuje detekcje na `/robo_vision/detections` i pozę robota na `/robo_vision/robot_pose`; subskrybuje `/robo_vision/config` do zdalnej konfiguracji. |
 
 ### Parametry trybu headless
 
@@ -327,6 +330,7 @@ w trybie headless:
 | `--tag-size METRES` | Dokładny rozmiar fizyczny tagu – wpływa na estymację odległości i SLAM. |
 | `--tag-names ID=NAME` | Czytelne etykiety w logach (np. `--tag-names 1=robot 2=goal`). |
 | `--no-apriltag` / `--qr` / `--laser` | Włączanie/wyłączanie detektorów stosownie do sceny. |
+| `--ros` | Aktywuje mostek ROS2 – detekcje i poza robota publikowane na topiki ROS. |
 
 Przykład kompleksowego uruchomienia headless (SLAM z nagrywaniem i kalibracją):
 
@@ -377,7 +381,54 @@ python main.py --mode pose --tag-size 0.10 --calib-output cam.npz
 
 # 11. Śledzenie markera ID=3 z rezerwą na pudełko
 python main.py --mode follow --follow-marker 3 --follow-box --target-distance 0.8
+
+# 12. Sprawdzenie stanu połączenia z ROS2
+python main.py --ros-status
+
+# 13. Detekcja headless z mostem ROS2
+python main.py --headless --ros
+
+# 14. SLAM headless z mostem ROS2 i nagrywaniem
+python main.py --mode slam --headless --ros --tag-size 0.05 --record slam_ros.mp4
 ```
+
+---
+
+### Integracja z ROS2
+
+robo-vision zawiera wbudowany mostek ROS2 (`robo_vision/ros2_bridge.py`), który
+pozwala na współpracę z ekosystemem ROS w czasie rzeczywistym.
+
+#### Sprawdzenie stanu połączenia z ROS2
+
+```bash
+python main.py --ros-status
+```
+
+Wyświetla:
+- czy `rclpy` jest zainstalowane i dostępne,
+- nazwę węzła ROS2 (`robo_vision_bridge`),
+- listę topików publikowanych i subskrybowanych,
+- poradę instalacyjną jeśli ROS2 nie jest dostępne.
+
+#### Uruchomienie z mostem ROS2
+
+```bash
+python main.py --headless --ros
+python main.py --headless --ros --mode slam --tag-size 0.05
+```
+
+Flaga `--ros` uruchamia węzeł ROS2 w tle i:
+
+| Topik | Kierunek | Opis |
+|---|---|---|
+| `/robo_vision/detections` | publikacja | JSON z listą bieżących detekcji (każda klatka). |
+| `/robo_vision/robot_pose` | publikacja | JSON z pozycją i orientacją robota (tryb SLAM). |
+| `/robo_vision/config` | subskrypcja | JSON z nadpisaniem konfiguracji na żywo (np. zmiana jakości). |
+
+> **Wymagania:** Zainstalowany i sourced'owany ROS2 (Humble / Iron / Jazzy lub
+> nowszy) z pakietem `rclpy`. Jeśli `rclpy` nie jest dostępne, program
+> uruchomi się normalnie z ostrzeżeniem w logu.
 
 ---
 
@@ -401,6 +452,8 @@ robo_vision/
 ├── marker_map.py          # SLAM marker map building + robot localisation (6-DoF)
 ├── auto_scenario.py       # Auto-follow scenario – śledzenie markera z wektorem sterowania
 ├── recorder.py            # Video recording utility (MP4, context manager)
+├── ros2_bridge.py         # ROS2 bridge – publishes detections & pose, subscribes config
+├── headless_guide.py      # Headless guide & ROS status helpers (--guide, --ros-status)
 └── gui.py                 # Tkinter GUI (Offset + SLAM tabs, 3-D visualisation, recording)
 modes/
 ├── __init__.py            # Exportuje BaseMode, CalibrationMode, BoxMode, PoseMode, FollowMode

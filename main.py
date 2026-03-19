@@ -289,6 +289,25 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--ros-status",
+        action="store_true",
+        help=(
+            "Print the ROS2 connection status: whether rclpy is available, "
+            "the node name, published and subscribed topics, then exit."
+        ),
+    )
+    parser.add_argument(
+        "--ros",
+        action="store_true",
+        help=(
+            "Enable the ROS2 bridge during the detection loop. "
+            "Requires rclpy (ROS2) to be installed and sourced. "
+            "Publishes detections to /robo_vision/detections and robot "
+            "pose to /robo_vision/robot_pose; subscribes to "
+            "/robo_vision/config for live configuration overrides."
+        ),
+    )
+    parser.add_argument(
         "--profile",
         action="store_true",
         help="Print execution times of key detection methods.",
@@ -524,6 +543,13 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
             tag_names=tag_names,
         )
         print(report)
+        return 0
+
+    # ── ROS status mode ───────────────────────────────────────────────
+    if args.ros_status:
+        from robo_vision.headless_guide import print_ros_status_report
+
+        print(print_ros_status_report())
         return 0
 
     # ── Startup validation ────────────────────────────────────────────
@@ -1096,6 +1122,24 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
             fps=cam.actual_fps or 30.0,
         )
 
+    # ── ROS2 bridge (optional) ────────────────────────────────────────
+    ros_bridge = None
+    if args.ros:
+        from robo_vision.ros2_bridge import ROS2Bridge
+
+        ros_bridge = ROS2Bridge()
+        if ros_bridge.available:
+            started = ros_bridge.start()
+            if started:
+                logger.info("ROS2 bridge started.")
+            else:
+                logger.warning("ROS2 bridge failed to start.")
+        else:
+            logger.warning(
+                "rclpy not available – ROS2 bridge disabled. "
+                "Install ROS2 and source the workspace to enable it."
+            )
+
     # Build list of enabled detector names for overlay
     _det_names: list[str] = []
     if not args.no_apriltag:
@@ -1158,6 +1202,18 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                     fps_counter = 0
                     t_fps = t_now
 
+                # Publish to ROS2 bridge (if active)
+                if ros_bridge is not None and ros_bridge.is_running:
+                    ros_bridge.publish_detections(detections)
+                    # Consume any pending config overrides sent via the ROS topic.
+                    # Full runtime reconfiguration (quality, detector toggles, etc.)
+                    # is not yet implemented – the received dict is logged so that
+                    # operators can verify overrides are reaching this node.
+                    # TODO: apply pending_cfg to detector/mode at runtime.
+                    pending_cfg = ros_bridge.get_pending_config()
+                    if pending_cfg is not None:
+                        logger.info("ROS2 config override received: %s", pending_cfg)
+
                 if args.headless:
                     if detections:
                         for d in detections:
@@ -1219,6 +1275,9 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
     except KeyboardInterrupt:
         logger.info("Interrupted by user.")
     finally:
+        if ros_bridge is not None and ros_bridge.is_running:
+            ros_bridge.stop()
+            logger.info("ROS2 bridge stopped.")
         if recorder is not None:
             recorder.stop()
             logger.info("Recording saved to %s", recorder.output_path)

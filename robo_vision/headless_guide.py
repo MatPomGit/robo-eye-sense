@@ -330,3 +330,112 @@ def print_headless_guide(
     lines.append(sep)
 
     return "\n".join(lines)
+
+
+# ── ROS connection status ────────────────────────────────────────────────────
+
+#: Topics published by the ROS2 bridge.
+ROS_PUBLISHED_TOPICS: list[str] = [
+    "/robo_vision/detections",
+    "/robo_vision/robot_pose",
+]
+
+#: Topics subscribed by the ROS2 bridge.
+ROS_SUBSCRIBED_TOPICS: list[str] = [
+    "/robo_vision/config",
+]
+
+#: Default ROS2 node name used by :class:`~robo_vision.ros2_bridge.ROS2Bridge`.
+ROS_DEFAULT_NODE_NAME: str = "robo_vision_bridge"
+
+
+def get_ros_status(node_name: str = ROS_DEFAULT_NODE_NAME) -> Dict[str, Any]:
+    """Return a status dict describing the ROS2 connection availability.
+
+    This function never starts or stops the bridge; it only inspects whether
+    ``rclpy`` is importable and reports the static configuration.
+
+    Parameters
+    ----------
+    node_name:
+        The ROS2 node name that would be used when the bridge is started.
+        Defaults to :data:`ROS_DEFAULT_NODE_NAME`.
+
+    Returns
+    -------
+    dict
+        Keys:
+
+        ``rclpy_available`` (bool)
+            ``True`` when the ``rclpy`` package is importable.
+        ``node_name`` (str)
+            The node name that will be used.
+        ``published_topics`` (list[str])
+            Topics the bridge publishes to.
+        ``subscribed_topics`` (list[str])
+            Topics the bridge subscribes to.
+    """
+    from robo_vision.ros2_bridge import _rclpy_available  # type: ignore[import]
+
+    return {
+        "rclpy_available": _rclpy_available(),
+        "node_name": node_name,
+        "published_topics": list(ROS_PUBLISHED_TOPICS),
+        "subscribed_topics": list(ROS_SUBSCRIBED_TOPICS),
+    }
+
+
+def print_ros_status_report(node_name: str = ROS_DEFAULT_NODE_NAME) -> str:
+    """Build and return a human-readable ROS connection status report.
+
+    Parameters
+    ----------
+    node_name:
+        The ROS2 node name that would be used.
+
+    Returns
+    -------
+    str
+        The full multi-line report text.
+    """
+    status = get_ros_status(node_name=node_name)
+    sep = "=" * 60
+    lines: list[str] = []
+
+    lines.append(sep)
+    lines.append("  ROS2 Connection Status")
+    lines.append(sep)
+    lines.append("")
+
+    available = status["rclpy_available"]
+    lines.append(
+        f"  rclpy available  : {'yes' if available else 'no'}"
+    )
+    lines.append(
+        f"  Node name        : {status['node_name']}"
+    )
+    lines.append("")
+
+    lines.append("  Published topics :")
+    for topic in status["published_topics"]:
+        lines.append(f"    {topic}")
+    lines.append("")
+
+    lines.append("  Subscribed topics:")
+    for topic in status["subscribed_topics"]:
+        lines.append(f"    {topic}")
+    lines.append("")
+
+    if available:
+        lines.append(
+            "  Status: ROS2 bridge is available. "
+            "Start with --ros to activate during detection."
+        )
+    else:
+        lines.append(
+            "  Status: rclpy not found. Install ROS2 and source the "
+            "workspace to enable the bridge."
+        )
+    lines.append(sep)
+
+    return "\n".join(lines)

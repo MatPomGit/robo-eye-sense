@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 from unittest.mock import patch
@@ -385,3 +386,181 @@ class TestCLIIntegration:
         assert rc == 0
         err = capsys.readouterr().err
         assert "not found" in err
+
+
+# ===========================================================================
+# 8. ROS connection status
+# ===========================================================================
+
+
+class TestGetRosStatus:
+    """get_ros_status should return a populated dict."""
+
+    def test_returns_dict(self):
+        from robo_vision.headless_guide import get_ros_status
+
+        status = get_ros_status()
+        assert isinstance(status, dict)
+
+    def test_required_keys(self):
+        from robo_vision.headless_guide import get_ros_status
+
+        status = get_ros_status()
+        for key in (
+            "rclpy_available",
+            "node_name",
+            "published_topics",
+            "subscribed_topics",
+        ):
+            assert key in status, f"Missing key: {key}"
+
+    def test_rclpy_available_is_bool(self):
+        from robo_vision.headless_guide import get_ros_status
+
+        status = get_ros_status()
+        assert isinstance(status["rclpy_available"], bool)
+
+    def test_topics_are_lists(self):
+        from robo_vision.headless_guide import get_ros_status
+
+        status = get_ros_status()
+        assert isinstance(status["published_topics"], list)
+        assert isinstance(status["subscribed_topics"], list)
+
+    def test_custom_node_name(self):
+        from robo_vision.headless_guide import get_ros_status
+
+        status = get_ros_status(node_name="my_node")
+        assert status["node_name"] == "my_node"
+
+    def test_published_topics_include_detections(self):
+        from robo_vision.headless_guide import get_ros_status
+
+        status = get_ros_status()
+        assert "/robo_vision/detections" in status["published_topics"]
+
+    def test_published_topics_include_pose(self):
+        from robo_vision.headless_guide import get_ros_status
+
+        status = get_ros_status()
+        assert "/robo_vision/robot_pose" in status["published_topics"]
+
+    def test_subscribed_topics_include_config(self):
+        from robo_vision.headless_guide import get_ros_status
+
+        status = get_ros_status()
+        assert "/robo_vision/config" in status["subscribed_topics"]
+
+    def test_rclpy_unavailable_when_not_installed(self):
+        """When rclpy is not in the environment, available should be False."""
+        from robo_vision.headless_guide import get_ros_status
+
+        # rclpy is not installed in the test environment
+        if importlib.util.find_spec("rclpy") is None:
+            status = get_ros_status()
+            assert status["rclpy_available"] is False
+
+
+class TestPrintRosStatusReport:
+    """print_ros_status_report should produce a human-readable report."""
+
+    def test_contains_ros2_header(self):
+        from robo_vision.headless_guide import print_ros_status_report
+
+        report = print_ros_status_report()
+        assert "ROS2 Connection Status" in report
+
+    def test_contains_rclpy_field(self):
+        from robo_vision.headless_guide import print_ros_status_report
+
+        report = print_ros_status_report()
+        assert "rclpy available" in report
+
+    def test_contains_node_name_field(self):
+        from robo_vision.headless_guide import print_ros_status_report
+
+        report = print_ros_status_report()
+        assert "robo_vision_bridge" in report
+
+    def test_contains_published_topics(self):
+        from robo_vision.headless_guide import print_ros_status_report
+
+        report = print_ros_status_report()
+        assert "/robo_vision/detections" in report
+        assert "/robo_vision/robot_pose" in report
+
+    def test_contains_subscribed_topics(self):
+        from robo_vision.headless_guide import print_ros_status_report
+
+        report = print_ros_status_report()
+        assert "/robo_vision/config" in report
+
+    def test_status_when_unavailable(self):
+        from robo_vision.headless_guide import print_ros_status_report
+
+        if importlib.util.find_spec("rclpy") is None:
+            report = print_ros_status_report()
+            assert "rclpy not found" in report
+
+    def test_custom_node_name_appears_in_report(self):
+        from robo_vision.headless_guide import print_ros_status_report
+
+        report = print_ros_status_report(node_name="test_node_xyz")
+        assert "test_node_xyz" in report
+
+
+# ===========================================================================
+# 9. ROS CLI integration
+# ===========================================================================
+
+
+class TestROSCLIIntegration:
+    """CLI arguments --ros and --ros-status should be parsed and handled."""
+
+    def test_ros_status_flag_parsed(self):
+        args = _parse_args(["--ros-status"])
+        assert args.ros_status is True
+
+    def test_ros_status_flag_default_false(self):
+        args = _parse_args([])
+        assert args.ros_status is False
+
+    def test_ros_flag_parsed(self):
+        args = _parse_args(["--ros"])
+        assert args.ros is True
+
+    def test_ros_flag_default_false(self):
+        args = _parse_args([])
+        assert args.ros is False
+
+    def test_ros_status_prints_report_and_exits(self, capsys):
+        from main import main
+
+        rc = main(["--ros-status"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "ROS2 Connection Status" in out
+        assert "rclpy available" in out
+        assert "/robo_vision/detections" in out
+        assert "/robo_vision/config" in out
+
+    def test_ros_flag_with_unavailable_rclpy_warns(self, capsys, tmp_path):
+        """--ros with no rclpy should warn and still run."""
+        video = tmp_path / "black.mp4"
+        _make_dummy_video(video)
+
+        with patch(
+            "robo_vision.april_tag_detector._apriltags_available",
+            return_value=False,
+        ):
+            from main import main
+
+            rc = main([
+                "--source", str(video),
+                "--headless",
+                "--ros",
+            ])
+
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "rclpy" in err.lower() or "ros" in err.lower()
