@@ -158,11 +158,18 @@ class CentroidTracker:
     # ------------------------------------------------------------------
 
     def _new_id(self) -> int:
+        """Allocate and return the next unique track ID."""
         track_id = self._next_id
         self._next_id += 1
         return track_id
 
     def _update_labeled(self, detections: List[Detection]) -> None:
+        """Match labeled detections by ``(detection_type, identifier)`` key.
+
+        Existing tracks are looked up by their key; new keys get a fresh
+        track ID.  Tracks absent for more than ``max_disappeared`` frames
+        are removed.
+        """
         seen_keys: Set[Tuple] = set()
         for d in detections:
             key = (d.detection_type, d.identifier)
@@ -193,6 +200,7 @@ class CentroidTracker:
         return track_id
 
     def _update_unlabeled(self, detections: List[Detection]) -> None:
+        """Dispatch unlabeled detections to centroid or Kalman matching."""
         if self._use_kalman:
             self._update_unlabeled_kalman(detections)
         else:
@@ -201,6 +209,12 @@ class CentroidTracker:
     # ---- original centroid matching ----------------------------------
 
     def _update_unlabeled_centroid(self, detections: List[Detection]) -> None:
+        """Match unlabeled detections to existing tracks by nearest centroid.
+
+        Builds a distance matrix between existing track centres and new
+        detection centres, then greedily assigns matches in order of
+        increasing distance up to ``max_distance``.
+        """
         if not detections:
             for track_id in list(self._unlabeled_tracks.keys()):
                 self._disappeared[track_id] = (

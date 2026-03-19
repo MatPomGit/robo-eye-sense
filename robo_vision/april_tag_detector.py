@@ -21,6 +21,7 @@ from typing import List, Optional
 import cv2
 import numpy as np
 
+from .base_detector import BaseDetector
 from .results import Detection, DetectionType
 
 _PUPIL_APRILTAGS_AVAILABLE: Optional[bool] = None
@@ -38,7 +39,7 @@ def _apriltags_available() -> bool:
 _ALL_FAMILIES = "tag36h11 tag25h9 tag16h5 tag12h10"
 
 
-class AprilTagDetector:
+class AprilTagDetector(BaseDetector):
     """Detect and decode AprilTag fiducial markers in a grayscale frame.
 
     All four standard tag families (tag36h11, tag25h9, tag16h5, tag12h10)
@@ -84,6 +85,10 @@ class AprilTagDetector:
             decode_sharpening=0.25,
             debug=0,
         )
+
+    def get_name(self) -> str:
+        """Return the detector name."""
+        return "AprilTag"
 
     def detect(self, gray_frame: np.ndarray) -> List[Detection]:
         """Return AprilTag detections found in *gray_frame*.

@@ -8,10 +8,14 @@ URLs (RTSP, HTTP).
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import Dict, Optional, Union
 
 import cv2
 import numpy as np
+
+logger = logging.getLogger("robo_vision.camera")
 
 
 class Camera:
@@ -29,6 +33,12 @@ class Camera:
         Requested frame height in pixels.
     fps:
         Requested frames-per-second.
+    max_read_failures:
+        Number of consecutive ``read()`` failures (``None`` frames) before
+        an automatic reconnection attempt is triggered.  Set to ``0`` to
+        disable reconnection.
+    max_reconnect_attempts:
+        Maximum number of reconnection attempts before giving up.
 
     Raises
     ------
@@ -42,7 +52,17 @@ class Camera:
         width: int = 640,
         height: int = 480,
         fps: int = 30,
+        max_read_failures: int = 5,
+        max_reconnect_attempts: int = 5,
     ) -> None:
+        self._source = source
+        self._width = width
+        self._height = height
+        self._fps = fps
+        self._max_read_failures = max_read_failures
+        self._max_reconnect_attempts = max_reconnect_attempts
+        self._consecutive_failures = 0
+
         self._cap = cv2.VideoCapture(source)
         if not self._cap.isOpened():
             raise RuntimeError(
@@ -57,11 +77,80 @@ class Camera:
     # ------------------------------------------------------------------
 
     def read(self) -> Optional[np.ndarray]:
-        """Grab and return the next frame, or ``None`` if the stream ended."""
+        """Grab and return the next frame, or ``None`` if the stream ended.
+
+        When the underlying capture device fails to deliver a frame for
+        *max_read_failures* consecutive calls, the camera is automatically
+        released and re-opened with exponential backoff (starting at 0.5 s,
+        doubling up to 30 s).  If reconnection succeeds the failure counter
+        is reset and the next frame is returned normally.  If all attempts
+        are exhausted ``None`` is returned.
+        """
         ret, frame = self._cap.read()
-        if not ret:
+        if ret:
+            self._consecutive_failures = 0
+            return frame
+
+        # Reconnection disabled or video file ended
+        if self._max_read_failures <= 0:
             return None
-        return frame
+
+        self._consecutive_failures += 1
+        if self._consecutive_failures < self._max_read_failures:
+            return None
+
+        # Threshold reached – attempt reconnection
+        logger.warning(
+            "Camera source %r: %d consecutive read failures, "
+            "attempting reconnection...",
+            self._source, self._consecutive_failures,
+        )
+        if self._reconnect():
+            self._consecutive_failures = 0
+            ret, frame = self._cap.read()
+            return frame if ret else None
+
+        return None
+
+    def _reconnect(self) -> bool:
+        """Try to re-open the capture device with exponential backoff.
+
+        Returns
+        -------
+        bool
+            ``True`` if the device was successfully re-opened.
+        """
+        backoff = 0.5
+        max_backoff = 30.0
+
+        for attempt in range(1, self._max_reconnect_attempts + 1):
+            logger.info(
+                "Reconnection attempt %d/%d for source %r "
+                "(waiting %.1f s)...",
+                attempt, self._max_reconnect_attempts,
+                self._source, backoff,
+            )
+            self._cap.release()
+            time.sleep(backoff)
+
+            self._cap = cv2.VideoCapture(self._source)
+            if self._cap.isOpened():
+                self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self._width)
+                self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._height)
+                self._cap.set(cv2.CAP_PROP_FPS, self._fps)
+                logger.info(
+                    "Reconnected to source %r on attempt %d.",
+                    self._source, attempt,
+                )
+                return True
+
+            backoff = min(backoff * 2, max_backoff)
+
+        logger.error(
+            "Failed to reconnect to source %r after %d attempts.",
+            self._source, self._max_reconnect_attempts,
+        )
+        return False
 
     # ------------------------------------------------------------------
     # Properties

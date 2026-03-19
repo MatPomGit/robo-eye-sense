@@ -23,6 +23,7 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING, Any
 
+from .base_detector import BaseDetector
 from .marker_map import MarkerMap, MarkerPose3D, RobotPose3D
 from .results import Detection, DetectionMode, DetectionType
 
@@ -51,14 +52,17 @@ if TYPE_CHECKING:
     from .auto_scenario import AutoFollowResult, AutoFollowScenario
     from .detector import RoboEyeDetector
     from .marker_map import SlamCalibrator
+    from .ros2_bridge import ROS2Bridge
 
 __all__ = [
     "APP_NAME",
     "AutoFollowResult",
     "AutoFollowScenario",
+    "BaseDetector",
     "MarkerMap",
     "MarkerPose3D",
     "RobotPose3D",
+    "ROS2Bridge",
     "RoboEyeDetector",
     "SlamCalibrator",
     "Detection",
@@ -69,6 +73,7 @@ __all__ = [
     "get_device_status",
     "get_calibration_info",
     "print_headless_guide",
+    "load_config",
     "__version__",
 ]
 APP_NAME = "robo-vision"
@@ -115,5 +120,15 @@ def __getattr__(name: str) -> Any:
         from . import headless_guide as _hg
 
         return getattr(_hg, name)
+
+    if name == "ROS2Bridge":
+        from .ros2_bridge import ROS2Bridge
+
+        return ROS2Bridge
+
+    if name == "load_config":
+        from .config import load_config
+
+        return load_config
 
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

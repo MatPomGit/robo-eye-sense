@@ -18,13 +18,14 @@ from typing import List, Optional
 import cv2
 import numpy as np
 
+from .base_detector import BaseDetector
 from .results import Detection, DetectionType
 
 # Valid single-character channel identifiers and their BGR indices
 _CHANNEL_BGR_INDEX = {"b": 0, "g": 1, "r": 2}
 
 
-class LaserSpotDetector:
+class LaserSpotDetector(BaseDetector):
     """Detect bright point-illumination spots (e.g. laser pointers) in a frame.
 
     Parameters
@@ -167,6 +168,10 @@ class LaserSpotDetector:
         return self.min_circularity + (
             high_circ_bound - self.min_circularity
         ) * (1.0 - sens_norm)
+
+    def get_name(self) -> str:
+        """Return the detector name."""
+        return "LaserSpot"
 
     def detect(self, frame: np.ndarray) -> List[Detection]:
         """Return laser-spot detections found in *frame*.

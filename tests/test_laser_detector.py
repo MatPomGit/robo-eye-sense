@@ -373,3 +373,241 @@ class TestLaserSpotDetector:
         det = self._detector()
         results = det.detect(frame)
         assert len(results) == 1
+
+
+# ====================================================================
+# Additional tests for varying size, brightness, and color
+# ====================================================================
+
+
+class TestLaserSpotDetectorSizes:
+    """Tests for laser detection with spots of varying sizes."""
+
+    def _detector(self, **kwargs):
+        return LaserSpotDetector(**kwargs)
+
+    def test_very_small_spot_radius_3(self):
+        """A very small spot (radius=3) should be detected."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        cv2.circle(frame, (100, 100), 3, (255, 255, 255), -1)
+        det = self._detector(min_area=1, sensitivity=90)
+        results = det.detect(frame)
+        assert len(results) >= 1
+
+    def test_medium_spot_radius_10(self):
+        """A medium spot (radius=10) should be detected."""
+        frame = np.zeros((300, 300, 3), dtype=np.uint8)
+        cv2.circle(frame, (150, 150), 10, (255, 255, 255), -1)
+        det = self._detector(target_area=314, sensitivity=80, max_area=2000)
+        results = det.detect(frame)
+        assert len(results) == 1
+
+    def test_large_spot_radius_25(self):
+        """A larger spot (radius=25) should be detected with appropriate settings."""
+        frame = np.zeros((300, 300, 3), dtype=np.uint8)
+        cv2.circle(frame, (150, 150), 25, (255, 255, 255), -1)
+        det = self._detector(target_area=1963, sensitivity=90, max_area=5000)
+        results = det.detect(frame)
+        assert len(results) == 1
+
+    def test_multiple_sizes_detected_with_high_sensitivity(self):
+        """Multiple spots of different sizes should all be detected at
+        high sensitivity with a wide area window."""
+        frame = np.zeros((400, 400, 3), dtype=np.uint8)
+        cv2.circle(frame, (80, 80), 4, (255, 255, 255), -1)
+        cv2.circle(frame, (200, 200), 10, (255, 255, 255), -1)
+        cv2.circle(frame, (320, 320), 18, (255, 255, 255), -1)
+        det = self._detector(target_area=200, sensitivity=100, max_area=5000)
+        results = det.detect(frame)
+        assert len(results) >= 2  # At least the two smaller ones
+
+    def test_spot_at_frame_edge(self):
+        """A spot touching the frame edge should still be detected."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        cv2.circle(frame, (5, 5), 6, (255, 255, 255), -1)
+        det = self._detector(sensitivity=80)
+        results = det.detect(frame)
+        assert len(results) >= 1
+
+
+class TestLaserSpotDetectorBrightness:
+    """Tests for laser detection with spots of varying brightness."""
+
+    def _detector(self, **kwargs):
+        return LaserSpotDetector(**kwargs)
+
+    def test_brightness_250_detected(self):
+        """A spot with brightness 250 should be detected at threshold 240."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        cv2.circle(frame, (100, 100), 6, (250, 250, 250), -1)
+        det = self._detector(brightness_threshold=240)
+        results = det.detect(frame)
+        assert len(results) == 1
+
+    def test_brightness_220_detected_with_low_threshold(self):
+        """A dimmer spot should be detected with a lower threshold."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        cv2.circle(frame, (100, 100), 6, (220, 220, 220), -1)
+        det = self._detector(brightness_threshold=200)
+        results = det.detect(frame)
+        assert len(results) == 1
+
+    def test_brightness_180_not_detected_with_high_threshold(self):
+        """A dim spot should not be detected with a high threshold."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        cv2.circle(frame, (100, 100), 6, (180, 180, 180), -1)
+        det = self._detector(brightness_threshold=200)
+        results = det.detect(frame)
+        assert results == []
+
+    def test_brightness_range_filtering(self):
+        """Only spots within the brightness range should be detected."""
+        # Two spots: one at 230, one at 255
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        cv2.circle(frame, (60, 100), 6, (230, 230, 230), -1)
+        cv2.circle(frame, (140, 100), 6, (255, 255, 255), -1)
+        # Range: [220, 240] – should detect only the 230 spot
+        det = self._detector(brightness_threshold=220, brightness_threshold_max=240)
+        results = det.detect(frame)
+        assert len(results) == 1
+
+    def test_gradual_brightness_spots(self):
+        """Spots with brightness just above threshold should be detected."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        # Spot at exactly the threshold value + 1
+        cv2.circle(frame, (100, 100), 6, (241, 241, 241), -1)
+        det = self._detector(brightness_threshold=240)
+        results = det.detect(frame)
+        assert len(results) == 1
+
+
+class TestLaserSpotDetectorColors:
+    """Tests for laser detection with different colored spots."""
+
+    def _detector(self, **kwargs):
+        return LaserSpotDetector(**kwargs)
+
+    def test_red_spot_on_dark_background(self):
+        """A pure red spot should be detected on red channel."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        cv2.circle(frame, (100, 100), 6, (0, 0, 255), -1)  # BGR: red
+        det = self._detector(channels="r")
+        results = det.detect(frame)
+        assert len(results) == 1
+        assert results[0].detection_type == DetectionType.LASER_SPOT
+
+    def test_green_spot_on_dark_background(self):
+        """A pure green spot should be detected on green channel."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        cv2.circle(frame, (100, 100), 6, (0, 255, 0), -1)  # BGR: green
+        det = self._detector(channels="g")
+        results = det.detect(frame)
+        assert len(results) == 1
+
+    def test_blue_spot_on_dark_background(self):
+        """A pure blue spot should be detected on blue channel."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        cv2.circle(frame, (100, 100), 6, (255, 0, 0), -1)  # BGR: blue
+        det = self._detector(channels="b")
+        results = det.detect(frame)
+        assert len(results) == 1
+
+    def test_red_spot_not_detected_on_blue_channel(self):
+        """A red spot should NOT be detected when only blue channel active."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        cv2.circle(frame, (100, 100), 6, (0, 0, 255), -1)  # BGR: red
+        det = self._detector(channels="b")
+        results = det.detect(frame)
+        assert results == []
+
+    def test_green_spot_not_detected_on_red_channel(self):
+        """A green spot should NOT be detected on red channel."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        cv2.circle(frame, (100, 100), 6, (0, 255, 0), -1)  # BGR: green
+        det = self._detector(channels="r")
+        results = det.detect(frame)
+        assert results == []
+
+    def test_yellow_spot_detected_on_rg_channels(self):
+        """A yellow (R+G) spot should be detected when both r and g are active."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        cv2.circle(frame, (100, 100), 6, (0, 255, 255), -1)  # BGR: yellow
+        det = self._detector(channels="rg")
+        results = det.detect(frame)
+        assert len(results) == 1
+
+    def test_cyan_spot_detected_on_bg_channels(self):
+        """A cyan (B+G) spot should be detected when both b and g are active."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        cv2.circle(frame, (100, 100), 6, (255, 255, 0), -1)  # BGR: cyan
+        det = self._detector(channels="bg")
+        results = det.detect(frame)
+        assert len(results) == 1
+
+    def test_colored_spot_on_noisy_background(self):
+        """Colored spots should be detected even with slight background noise."""
+        rng = np.random.RandomState(42)
+        frame = rng.randint(0, 30, (200, 200, 3), dtype=np.uint8)
+        cv2.circle(frame, (100, 100), 8, (0, 0, 255), -1)  # red spot
+        det = self._detector(channels="r", brightness_threshold=200, sensitivity=80)
+        results = det.detect(frame)
+        assert len(results) >= 1
+
+
+class TestLaserSpotDetectorNoPoints:
+    """Tests verifying correct behavior on images without laser points."""
+
+    def _detector(self, **kwargs):
+        return LaserSpotDetector(**kwargs)
+
+    def test_uniform_gray_frame_no_detection(self):
+        """A uniformly gray frame should produce no detections."""
+        frame = np.full((200, 200, 3), 128, dtype=np.uint8)
+        det = self._detector()
+        results = det.detect(frame)
+        assert results == []
+
+    def test_uniform_white_frame_no_detection(self):
+        """A uniformly white frame has no contours, so no detections."""
+        frame = np.full((200, 200, 3), 255, dtype=np.uint8)
+        det = self._detector()
+        results = det.detect(frame)
+        # The entire frame is one giant contour – should be filtered by max_area
+        assert results == []
+
+    def test_gradient_frame_no_detection(self):
+        """A smooth gradient should not produce laser spot detections."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        for col in range(200):
+            frame[:, col, :] = int(col / 200 * 255)
+        det = self._detector()
+        results = det.detect(frame)
+        assert results == []
+
+    def test_random_noise_frame_no_detection(self):
+        """Random noise below threshold should produce no detections."""
+        rng = np.random.RandomState(123)
+        frame = rng.randint(0, 200, (200, 200, 3), dtype=np.uint8)
+        det = self._detector(brightness_threshold=240)
+        results = det.detect(frame)
+        assert results == []
+
+    def test_dark_frame_with_dim_noise(self):
+        """A mostly dark frame with very dim noise should produce no detections."""
+        rng = np.random.RandomState(456)
+        frame = rng.randint(0, 50, (200, 200, 3), dtype=np.uint8)
+        det = self._detector()
+        results = det.detect(frame)
+        assert results == []
+
+
+class TestLaserSpotDetectorGetName:
+    """Tests for the get_name() method from BaseDetector."""
+
+    def test_get_name_returns_string(self):
+        det = LaserSpotDetector()
+        assert isinstance(det.get_name(), str)
+
+    def test_get_name_returns_laser_spot(self):
+        det = LaserSpotDetector()
+        assert det.get_name() == "LaserSpot"

@@ -15,6 +15,7 @@ from typing import List, Optional
 import cv2
 import numpy as np
 
+from .base_detector import BaseDetector
 from .results import Detection, DetectionType
 
 
@@ -22,7 +23,7 @@ def _pyzbar_available() -> bool:
     return importlib.util.find_spec("pyzbar") is not None
 
 
-class QRCodeDetector:
+class QRCodeDetector(BaseDetector):
     """Detect and decode QR codes in a colour frame.
 
     The detector automatically selects the best available backend:
@@ -64,6 +65,10 @@ class QRCodeDetector:
     def backend(self) -> str:
         """Name of the active detection backend (``'pyzbar'`` or ``'opencv'``)."""
         return self._backend
+
+    def get_name(self) -> str:
+        """Return the detector name."""
+        return "QRCode"
 
     def detect(self, frame: np.ndarray) -> List[Detection]:
         """Return QR-code detections found in *frame*.

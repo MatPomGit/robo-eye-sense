@@ -1,0 +1,10 @@
+# Additional dependencies for the GUI (--gui mode).
+# Install with:  pip install -r requirements-gui.txt
+
+-r requirements-core.txt
+
+# Tkinter image rendering
+Pillow>=9.0.0
+
+# Interactive 3-D SLAM visualisation (optional)
+matplotlib>=3.5.0

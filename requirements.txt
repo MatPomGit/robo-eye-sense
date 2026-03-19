@@ -1,16 +1,7 @@
-# Core dependencies
-numpy>=1.20.0
-opencv-python>=4.5.0
+# All dependencies – convenience file that includes everything.
+# For selective installation, see:
+#   requirements-core.txt  – headless / core runtime
+#   requirements-gui.txt   – GUI (includes core)
+#   requirements-dev.txt   – development and testing (includes GUI)
 
-# GUI support (tkinter image rendering)
-Pillow>=9.0.0
-
-# AprilTag detection
-# Pre-compiled binaries available for x86_64 and ARM (Raspberry Pi).
-pupil-apriltags>=1.0.4
-
-# QR-code detection (preferred backend)
-# Requires libzbar0 system library:
-#   Ubuntu/Debian:  sudo apt-get install libzbar0
-#   macOS:          brew install zbar
-pyzbar>=0.1.9
+-r requirements-gui.txt
