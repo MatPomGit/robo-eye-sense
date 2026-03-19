@@ -944,33 +944,6 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                             break
 
                 logger.info("Stream ended.")
-
-                # Save marker map
-                mmap = calibrator.marker_map
-                if args.map_file:
-                    map_path = args.map_file
-                else:
-                    maps_dir = Path(__file__).resolve().parent / "maps"
-                    maps_dir.mkdir(exist_ok=True)
-                    map_path = str(maps_dir / "marker_map.json")
-                mmap.save(map_path)
-                print(f"\n{'='*50}")
-                print("SLAM calibration result")
-                print(f"{'='*50}")
-                print(f"Frames processed  : {calibrator.frame_count}")
-                print(f"Tag size          : {tag_size_cm:.1f} cm")
-                print(f"Markers in map    : {len(mmap)}")
-                for m in mmap.markers():
-                    px, py, pz = m.position
-                    r, p, y = m.orientation
-                    print(
-                        f"  tag {m.marker_id:>4s}: "
-                        f"pos=({px:+.1f}, {py:+.1f}, {pz:+.1f}) cm  "
-                        f"ori=({r:+.1f}, {p:+.1f}, {y:+.1f})°  "
-                        f"obs={m.observations}"
-                    )
-                print(f"Map saved to      : {map_path}")
-                print(f"{'='*50}")
         except KeyboardInterrupt:
             logger.info("Interrupted by user.")
         except RuntimeError as exc:
@@ -982,6 +955,38 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                 logger.info("Recording saved to %s", args.record)
             if not args.headless:
                 cv2.destroyAllWindows()
+
+            # Save marker map – runs on normal exit *and* on KeyboardInterrupt
+            mmap = calibrator.marker_map
+            if args.map_file:
+                map_path = args.map_file
+            else:
+                maps_dir = Path(__file__).resolve().parent / "maps"
+                maps_dir.mkdir(exist_ok=True)
+                map_path = str(maps_dir / "marker_map.json")
+            try:
+                mmap.save(map_path)
+            except OSError as _e:
+                logger.error("Could not save marker map: %s", _e)
+                map_path = None  # type: ignore[assignment]
+            print(f"\n{'='*50}")
+            print("SLAM calibration result")
+            print(f"{'='*50}")
+            print(f"Frames processed  : {calibrator.frame_count}")
+            print(f"Tag size          : {tag_size_cm:.1f} cm")
+            print(f"Markers in map    : {len(mmap)}")
+            for m in mmap.markers():
+                px, py, pz = m.position
+                r, p, y = m.orientation
+                print(
+                    f"  tag {m.marker_id:>4s}: "
+                    f"pos=({px:+.1f}, {py:+.1f}, {pz:+.1f}) cm  "
+                    f"ori=({r:+.1f}, {p:+.1f}, {y:+.1f})°  "
+                    f"obs={m.observations}"
+                )
+            if map_path is not None:
+                print(f"Map saved to      : {map_path}")
+            print(f"{'='*50}")
         return 0
 
     # ── New operational modes (calibration / box / pose / follow) ────────

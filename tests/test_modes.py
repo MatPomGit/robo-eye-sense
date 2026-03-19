@@ -9,6 +9,7 @@ Tests verify:
 
 from __future__ import annotations
 
+import math
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -302,6 +303,100 @@ class TestPoseMode:
         assert mtx.shape == (3, 3)
         assert mtx[0, 0] > 0  # focal length positive
         assert mtx[2, 2] == 1.0
+
+    def test_correction_vector_zero_when_no_tags(self):
+        """correction_vector should be (0.0, 0.0) when no tags are detected."""
+        mode = PoseMode()
+        mock_detector = MagicMock()
+        mock_detector.detect.return_value = []
+        mode._detector = mock_detector
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        mode.run(frame, _make_context())
+        angle, dist = mode.correction_vector
+        assert angle == 0.0
+        assert dist == 0.0
+
+    def test_correction_vector_populated_with_external_detections(self):
+        """correction_vector should be non-zero when a tag is detected."""
+        mode = PoseMode(sensitivity=100)
+
+        det = MagicMock()
+        # Corners centred around x=150 on a 200 px wide frame (right of centre)
+        det.corners = [[125, 25], [175, 25], [175, 75], [125, 75]]
+        det.identifier = "1"
+
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        ctx = _make_context()
+        ctx["april_detections"] = [det]
+        mode.run(frame, ctx)
+        angle, dist = mode.correction_vector
+        # With a valid detection the distance should be positive
+        assert dist > 0.0
+
+    def test_correction_vector_angle_positive_for_right_tag(self):
+        """Tag to the right of centre → positive horizontal angle."""
+        mode = PoseMode(sensitivity=100)
+
+        det = MagicMock()
+        # Corners centred around x=150 on a 200 px wide frame (right of centre)
+        det.corners = [[125, 25], [175, 25], [175, 75], [125, 75]]
+        det.identifier = "1"
+
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        ctx = _make_context()
+        ctx["april_detections"] = [det]
+        mode.run(frame, ctx)
+        angle, _ = mode.correction_vector
+        assert angle > 0.0
+
+    def test_correction_vector_angle_negative_for_left_tag(self):
+        """Tag to the left of centre → negative horizontal angle."""
+        mode = PoseMode(sensitivity=100)
+
+        det = MagicMock()
+        # Corners centred around x=50 on a 200 px wide frame (left of centre)
+        det.corners = [[25, 25], [75, 25], [75, 75], [25, 75]]
+        det.identifier = "1"
+
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        ctx = _make_context()
+        ctx["april_detections"] = [det]
+        mode.run(frame, ctx)
+        angle, _ = mode.correction_vector
+        assert angle < 0.0
+
+    def test_steering_vector_derived_from_pose(self):
+        """steering_vector should match sin(correction_angle) after pose estimation."""
+        mode = PoseMode(sensitivity=100)
+
+        det = MagicMock()
+        det.corners = [[125, 25], [175, 25], [175, 75], [125, 75]]
+        det.identifier = "1"
+
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        ctx = _make_context()
+        ctx["april_detections"] = [det]
+        mode.run(frame, ctx)
+        angle, _ = mode.correction_vector
+        expected_steering = math.sin(math.radians(angle))
+        assert mode.steering_vector == pytest.approx(expected_steering, abs=1e-6)
+
+    def test_headless_output_includes_angle_and_dist(self, capsys):
+        """Headless mode should print angle and distance for each detected tag."""
+        mode = PoseMode(sensitivity=100)
+
+        det = MagicMock()
+        det.corners = [[125, 25], [175, 25], [175, 75], [125, 75]]
+        det.identifier = "5"
+
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        ctx = _make_context(headless=True, frame_idx=10)
+        ctx["april_detections"] = [det]
+        mode.run(frame, ctx)
+        out = capsys.readouterr().out
+        assert "frame 10" in out
+        assert "angle:" in out
+        assert "dist:" in out
 
 
 # ===========================================================================
@@ -644,3 +739,67 @@ class TestNewModeIntegration:
         assert rc == 1
         err = capsys.readouterr().err
         assert "chessboard-size" in err.lower()
+
+    def test_slam_headless_saves_map_on_normal_exit(self, capsys, tmp_path):
+        """SLAM mode should save JSON map after processing all frames."""
+        video = tmp_path / "slam.mp4"
+        _make_dummy_video(video)
+        map_file = tmp_path / "test_map.json"
+
+        with patch(
+            "robo_vision.april_tag_detector._apriltags_available",
+            return_value=False,
+        ):
+            from main import main
+
+            rc = main([
+                "--mode", "slam",
+                "--headless",
+                "--source", str(video),
+                "--map-file", str(map_file),
+            ])
+        assert rc == 0
+        # Map file must be written even with no tags detected (empty map)
+        assert map_file.exists()
+        import json
+        data = json.loads(map_file.read_text())
+        assert "markers" in data
+
+    def test_slam_headless_saves_map_on_keyboard_interrupt(self, capsys, tmp_path):
+        """SLAM mode must save the JSON map even when interrupted with Ctrl+C."""
+        video = tmp_path / "slam_int.mp4"
+        _make_dummy_video(video, num_frames=10)
+        map_file = tmp_path / "test_map_int.json"
+
+        _frame_counter = [0]
+
+        with patch(
+            "robo_vision.april_tag_detector._apriltags_available",
+            return_value=False,
+        ):
+            from main import main
+            from robo_vision.detector import RoboEyeDetector
+
+            original = RoboEyeDetector.process_frame
+
+            def _patched(self, frame):
+                _frame_counter[0] += 1
+                if _frame_counter[0] >= 3:
+                    raise KeyboardInterrupt
+                return original(self, frame)
+
+            with patch.object(RoboEyeDetector, "process_frame", _patched):
+                rc = main([
+                    "--mode", "slam",
+                    "--headless",
+                    "--source", str(video),
+                    "--map-file", str(map_file),
+                ])
+
+        # Should exit cleanly (rc=0) even after interrupt
+        assert rc == 0
+        # Map file MUST be written despite the interrupt
+        assert map_file.exists(), "Map must be saved even when interrupted"
+        import json
+        data = json.loads(map_file.read_text())
+        assert "markers" in data

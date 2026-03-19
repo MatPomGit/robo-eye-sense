@@ -1,13 +1,18 @@
 """Pose estimation mode – estimate 6-DoF pose of AprilTags.
 
 Loads camera calibration from a ``.npz`` file, detects AprilTags using
-``pupil_apriltags``, and estimates their pose with ``cv2.solvePnP``.
+``pupil_apriltags``, and estimates their pose with ``cv2.solvePnP`` followed
+by ``cv2.solvePnPRefineLM`` for improved accuracy.
 Visualises tag borders, IDs, and 3-D axes on the frame.
+
+The :attr:`correction_vector` property exposes the horizontal angular error
+and distance to the primary tag so the robot can compute approach corrections.
 """
 
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import cv2
@@ -148,6 +153,10 @@ class PoseMode(BaseMode):
         self._consecutive_counts: Dict[str, int] = {}
         # Last computed horizontal steering value (normalised to [-1, 1])
         self._steering_vector: float = 0.0
+        # Correction vector: (horizontal_angle_deg, distance_m)
+        # horizontal_angle_deg – positive = tag is to the right, robot should turn right
+        # distance_m           – distance from camera to tag centre
+        self._correction_vector: Tuple[float, float] = (0.0, 0.0)
 
         if calibration_path is not None:
             try:
@@ -181,6 +190,24 @@ class PoseMode(BaseMode):
         tag is present the property returns ``0.0``.
         """
         return self._steering_vector
+
+    @property
+    def correction_vector(self) -> Tuple[float, float]:
+        """Correction vector for robot approach, derived from the refined pose.
+
+        Returns a ``(horizontal_angle_deg, distance_m)`` tuple computed from
+        the 3-D translation vector of the primary detected AprilTag:
+
+        * **horizontal_angle_deg** – signed horizontal angle (degrees) between
+          the camera optical axis and the tag centre.  Positive means the tag
+          is to the right; negative means left.  The robot should rotate by
+          this amount to centre the tag.
+        * **distance_m** – Euclidean distance from the camera to the tag
+          centre in metres.  Use this to decide when to stop approaching.
+
+        Both values are ``0.0`` when no qualified tag is visible.
+        """
+        return self._correction_vector
 
     # ------------------------------------------------------------------
     def _ensure_detector(self) -> None:
@@ -325,7 +352,7 @@ class PoseMode(BaseMode):
             if tid not in detected_ids:
                 self._consecutive_counts[tid] = 0
 
-        # Compute horizontal steering from the first qualified tag
+        # Compute horizontal steering from the first qualified tag (pixel-based)
         if tags_data:
             first_corners, _ = tags_data[0]
             tag_cx = float(first_corners[:, 0].mean())
@@ -333,6 +360,7 @@ class PoseMode(BaseMode):
             self._steering_vector = (tag_cx - half_w) / half_w if half_w > 0 else 0.0
         else:
             self._steering_vector = 0.0
+            self._correction_vector = (0.0, 0.0)
 
         if not tags_data:
             cv2.putText(
@@ -344,6 +372,7 @@ class PoseMode(BaseMode):
             return vis
 
         headless = context.get("headless", False)
+        primary_correction_set = False
 
         for corners_2d, tag_id in tags_data:
             # Draw tag border when using the internal detector (the main
@@ -360,7 +389,7 @@ class PoseMode(BaseMode):
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2, cv2.LINE_AA,
             )
 
-            # Pose estimation
+            # Initial pose estimation
             try:
                 success, rvec, tvec = cv2.solvePnP(
                     self._obj_pts, corners_2d, cam_mtx, dist,
@@ -369,29 +398,55 @@ class PoseMode(BaseMode):
                 logger.exception("solvePnP failed for tag %s", tag_id)
                 continue
 
-            if success:
-                # Draw 3-D frame axes (X=red, Y=green, Z=blue)
-                try:
-                    cv2.drawFrameAxes(
-                        vis, cam_mtx, dist, rvec, tvec, self._tag_size * 0.5
-                    )
-                except (cv2.error, AttributeError):
-                    # cv2.drawFrameAxes was added in OpenCV 4.1; fall back
-                    # to manual projection for older builds.
-                    _draw_pose_axes_fallback(
-                        vis, cam_mtx, dist, rvec, tvec, self._tag_size * 0.5
-                    )
+            if not success:
+                continue
 
-                if headless:
-                    frame_idx = context.get("frame_idx", 0)
-                    tv = tvec.flatten()
-                    rv = rvec.flatten()
-                    print(
-                        f"[frame {frame_idx}] "
-                        f"ID: {tag_id} | "
-                        f"tvec: [{tv[0]:.4f}, {tv[1]:.4f}, {tv[2]:.4f}] | "
-                        f"rvec: [{rv[0]:.4f}, {rv[1]:.4f}, {rv[2]:.4f}] | "
-                        f"steering: {self._steering_vector:+.4f}"
-                    )
+            # Pose refinement using Levenberg-Marquardt for higher accuracy
+            try:
+                rvec, tvec = cv2.solvePnPRefineLM(
+                    self._obj_pts, corners_2d, cam_mtx, dist,
+                    rvec, tvec,
+                )
+            except (cv2.error, AttributeError):
+                # solvePnPRefineLM unavailable or failed – keep initial estimate
+                logger.debug("solvePnPRefineLM unavailable for tag %s", tag_id)
+
+            # Compute correction vector for the primary (first) tag
+            tv = tvec.flatten()
+            # Horizontal angle: positive = tag right of optical axis
+            tag_angle_deg = math.degrees(math.atan2(float(tv[0]), float(tv[2])))
+            # Euclidean distance in metres
+            tag_distance_m = float(np.linalg.norm(tv))
+
+            if not primary_correction_set:
+                self._correction_vector = (tag_angle_deg, tag_distance_m)
+                # Also update steering from pose (overrides pixel-based estimate)
+                self._steering_vector = math.sin(math.radians(tag_angle_deg))
+                primary_correction_set = True
+
+            # Draw 3-D frame axes (X=red, Y=green, Z=blue)
+            try:
+                cv2.drawFrameAxes(
+                    vis, cam_mtx, dist, rvec, tvec, self._tag_size * 0.5
+                )
+            except (cv2.error, AttributeError):
+                # cv2.drawFrameAxes was added in OpenCV 4.1; fall back
+                # to manual projection for older builds.
+                _draw_pose_axes_fallback(
+                    vis, cam_mtx, dist, rvec, tvec, self._tag_size * 0.5
+                )
+
+            if headless:
+                frame_idx = context.get("frame_idx", 0)
+                rv = rvec.flatten()
+                print(
+                    f"[frame {frame_idx}] "
+                    f"ID: {tag_id} | "
+                    f"tvec: [{tv[0]:.4f}, {tv[1]:.4f}, {tv[2]:.4f}] | "
+                    f"rvec: [{rv[0]:.4f}, {rv[1]:.4f}, {rv[2]:.4f}] | "
+                    f"angle: {tag_angle_deg:+.2f}° | "
+                    f"dist: {tag_distance_m:.4f}m | "
+                    f"steering: {self._steering_vector:+.4f}"
+                )
 
         return vis
