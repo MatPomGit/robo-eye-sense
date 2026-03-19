@@ -293,6 +293,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Print execution times of key detection methods.",
     )
+    parser.add_argument(
+        "--no-overlay",
+        action="store_true",
+        help="Disable the on-screen information overlay.",
+    )
     return parser.parse_args(argv)
 
 
@@ -1091,20 +1096,43 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
             fps=cam.actual_fps or 30.0,
         )
 
+    # Build list of enabled detector names for overlay
+    _det_names: list[str] = []
+    if not args.no_apriltag:
+        _det_names.append("AprilTags")
+    if args.qr:
+        _det_names.append("QR codes")
+    if args.laser:
+        _det_names.append("Laser spots")
+
+    overlay = None
+    if not getattr(args, "no_overlay", False):
+        from robo_vision.overlay import OverlayRenderer
+
+        overlay = OverlayRenderer(
+            enabled=True,
+            mode=args.mode,
+            quality=args.quality,
+            enabled_detectors=_det_names,
+        )
+
     fps_counter = 0
     fps_display = 0.0
     t_fps = time.perf_counter()
     frame_total = 0
+    _rec_file_counter = 0
 
     logger.info("Starting detection loop...")
     if not args.headless:
-        print("Press q in the display window to quit.")
+        logger.info("Press q to quit, r to toggle recording.")
 
     try:
         with cam:
             if recorder is not None:
                 recorder.start()
                 logger.info("Recording to %s", args.record)
+                if overlay:
+                    overlay.set_recording(True)
 
             while True:
                 frame = cam.read()
@@ -1144,21 +1172,48 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                         recorder.write_frame(vis)
                 else:
                     vis = detector.draw_detections(frame.copy(), detections)
-                    cv2.putText(
-                        vis,
-                        f"FPS: {fps_display:.1f}",
-                        (8, 24),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6,
-                        (255, 255, 255),
-                        1,
-                        cv2.LINE_AA,
-                    )
+                    if overlay:
+                        overlay.draw(vis, detections, fps_display)
+                    else:
+                        cv2.putText(
+                            vis,
+                            f"FPS: {fps_display:.1f}",
+                            (8, 24),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.6,
+                            (255, 255, 255),
+                            1,
+                            cv2.LINE_AA,
+                        )
                     if recorder is not None:
                         recorder.write_frame(vis)
                     cv2.imshow("RoboEyeSense", vis)
-                    if cv2.waitKey(1) & 0xFF == ord("q"):
+                    key = cv2.waitKey(1) & 0xFF
+                    if key == ord("q"):
                         break
+                    elif key == ord("r"):
+                        # Toggle recording
+                        if recorder is not None and recorder.is_recording:
+                            recorder.stop()
+                            logger.info("Recording stopped: %s", recorder.output_path)
+                            if overlay:
+                                overlay.set_recording(False)
+                            recorder = None
+                        else:
+                            _rec_file_counter += 1
+                            from robo_vision.recorder import VideoRecorder
+
+                            rec_path = f"recording_{_rec_file_counter}.mp4"
+                            recorder = VideoRecorder(
+                                rec_path,
+                                width=cam.actual_width,
+                                height=cam.actual_height,
+                                fps=cam.actual_fps or 30.0,
+                            )
+                            recorder.start()
+                            logger.info("Recording started: %s", rec_path)
+                            if overlay:
+                                overlay.set_recording(True)
 
             logger.info("Stream ended. Total frames processed: %d", frame_total)
     except KeyboardInterrupt:
@@ -1166,7 +1221,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
     finally:
         if recorder is not None:
             recorder.stop()
-            logger.info("Recording saved to %s", args.record)
+            logger.info("Recording saved to %s", recorder.output_path)
         if not args.headless:
             cv2.destroyAllWindows()
 
