@@ -7,6 +7,22 @@ stosuje [Semantic Versioning](https://semver.org/lang/pl/).
 
 ---
 
+## [0.5.0] – 2026-03-20
+
+### Poprawione
+
+- **Detekcja tagów z nazwami** – naprawiono błąd, przez który wzbogacanie
+  identyfikatorów tagów AprilTag o czytelne nazwy (`tag_names`) nie działało
+  gdy detektor był konfigurowany bez wstępnej inicjalizacji pupil-apriltags.
+  Zmieniono mechanizm wyłączania detektora: `disable_april()` przenosi teraz
+  obiekt C do `_april_holder` (zapobiega wywołaniu `__del__`) i ustawia
+  `_april_detector = None`, dzięki czemu warunek `is not None` jednoznacznie
+  określa aktywność detektora.
+- **Spójność wersji** – ujednolicono numer wersji pomiędzy `pyproject.toml`
+  a `robo_vision/__init__.py` (oba pliki zawierają teraz `0.5.0`).
+
+---
+
 ## [0.4.0] – 2026-03-19
 
 ### Dodane
