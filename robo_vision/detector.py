@@ -27,10 +27,12 @@ import warnings
 from concurrent.futures import ThreadPoolExecutor, Future
 from typing import Dict, List, Optional, Tuple
 
-import cv2
 import numpy as np
 
 from . import april_tag_detector
+from ._cv2_compat import get_cv2
+
+cv2 = get_cv2()
 from .laser_detector import LaserSpotDetector
 from .qr_detector import QRCodeDetector
 from .results import Detection, DetectionMode, DetectionType

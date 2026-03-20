@@ -19,6 +19,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 
+from robo_vision import april_tag_detector as _april_runtime
+
 from .base import BaseMode
 from .box_mode import BoxMode
 
@@ -124,9 +126,12 @@ class FollowMode(BaseMode):
     def _ensure_detector(self) -> None:
         if self._detector is not None:
             return
+        if not _april_runtime._apriltags_available():
+            self._detector = None
+            return
         try:
             from pupil_apriltags import Detector  # type: ignore[import-untyped]
-            self._detector = Detector(families="tag36h11")
+            self._detector = _april_runtime.retain_detector_reference(Detector(families="tag36h11"))
         except ImportError:
             try:
                 import apriltag  # type: ignore[import-untyped]

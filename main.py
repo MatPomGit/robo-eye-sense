@@ -65,12 +65,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from robo_vision import APP_NAME, RoboEyeDetector, __version__
-
-from robo_vision.camera import Camera
+from robo_vision import APP_NAME, __version__
 from robo_vision.results import DetectionMode, DetectionType
-
-import cv2  # noqa: E402  – imported after robo_vision to apply Qt font fix
 
 # Maps the --quality CLI value to the internal DetectionMode enum.
 _QUALITY_TO_DETECTION_MODE: dict[str, DetectionMode] = {
@@ -722,6 +718,15 @@ class RoboVisionController:
 
     def _run_loop(self) -> int:
         """Internal detection loop; returns the process exit code."""
+        from robo_vision import RoboEyeDetector
+        from robo_vision.camera import Camera
+
+        cv2 = None
+        if self._mode in ("calibration", "box", "pose", "follow"):
+            from robo_vision._cv2_compat import get_cv2
+
+            cv2 = get_cv2()
+
         detection_mode = _QUALITY_TO_DETECTION_MODE[self._quality]
 
         detector = RoboEyeDetector(
@@ -864,6 +869,9 @@ class RoboVisionController:
 
 
 def main(argv: list[str] | None = None) -> int:  # noqa: C901
+    from robo_vision import RoboEyeDetector
+    from robo_vision.camera import Camera
+
     args = _parse_args(argv)
 
     # ── Logging setup: INFO→stdout, WARNING+→stderr ───────────────────
@@ -889,6 +897,12 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
     root.addHandler(_h_err)
 
     logger.info("%s %s", APP_NAME, __version__)
+
+    cv2 = None
+    if not args.headless or args.mode in ("slam", "calibration", "box", "pose", "follow"):
+        from robo_vision._cv2_compat import get_cv2
+
+        cv2 = get_cv2()
 
     # ── Profiling ─────────────────────────────────────────────────────
     if args.profile:

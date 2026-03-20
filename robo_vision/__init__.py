@@ -20,6 +20,7 @@ even when OpenCV is not installed or fails to initialise.
 
 from __future__ import annotations
 
+import importlib
 import os
 from typing import TYPE_CHECKING, Any
 
@@ -145,6 +146,12 @@ def __getattr__(name: str) -> Any:
         from .ros2_bridge import ROS2Bridge
 
         return ROS2Bridge
+
+
+    if name in {"april_tag_detector", "detector", "camera", "qr_detector", "laser_detector"}:
+        module = importlib.import_module(f".{name}", __name__)
+        globals()[name] = module
+        return module
 
     if name == "load_config":
         from .config import load_config

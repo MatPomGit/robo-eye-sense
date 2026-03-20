@@ -15,9 +15,9 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-import cv2
 import numpy as np
 
+from ._cv2_compat import get_cv2
 from .base_detector import BaseDetector
 from .results import Detection, DetectionType
 
@@ -188,6 +188,8 @@ class LaserSpotDetector(BaseDetector):
             ``identifier=None``, the spot centre, and a bounding-rect
             approximation of the corners.
         """
+        cv2 = get_cv2()
+
         # Build a single-channel brightness image from the selected channels.
         # When all three channels are active the standard weighted grayscale
         # conversion is used (backward-compatible).  Otherwise only the

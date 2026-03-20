@@ -12,9 +12,9 @@ from __future__ import annotations
 import importlib
 from typing import List, Optional
 
-import cv2
 import numpy as np
 
+from ._cv2_compat import get_cv2
 from .base_detector import BaseDetector
 from .results import Detection, DetectionType
 
@@ -59,6 +59,7 @@ class QRCodeDetector(BaseDetector):
             self._backend = "pyzbar" if _pyzbar_available() else "opencv"
 
         if self._backend == "opencv":
+            cv2 = get_cv2()
             self._cv_detector = cv2.QRCodeDetector()
 
     @property
@@ -89,7 +90,8 @@ class QRCodeDetector(BaseDetector):
                 return self._detect_pyzbar(frame)
             except ImportError:
                 self._backend = "opencv"
-                self._cv_detector = cv2.QRCodeDetector()
+                cv2 = get_cv2()
+            self._cv_detector = cv2.QRCodeDetector()
         return self._detect_opencv(frame)
 
     # ------------------------------------------------------------------

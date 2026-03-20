@@ -12,8 +12,9 @@ import logging
 import time
 from typing import Dict, Optional, Union
 
-import cv2
 import numpy as np
+
+from ._cv2_compat import get_cv2
 
 logger = logging.getLogger("robo_vision.camera")
 
@@ -63,14 +64,16 @@ class Camera:
         self._max_reconnect_attempts = max_reconnect_attempts
         self._consecutive_failures = 0
 
+        cv2 = get_cv2()
+        self._cv2 = cv2
         self._cap = cv2.VideoCapture(source)
         if not self._cap.isOpened():
             raise RuntimeError(
                 f"Failed to open camera/video source: {source!r}"
             )
-        self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-        self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-        self._cap.set(cv2.CAP_PROP_FPS, fps)
+        self._cap.set(self._cv2.CAP_PROP_FRAME_WIDTH, width)
+        self._cap.set(self._cv2.CAP_PROP_FRAME_HEIGHT, height)
+        self._cap.set(self._cv2.CAP_PROP_FPS, fps)
 
     # ------------------------------------------------------------------
     # Frame access
@@ -133,11 +136,11 @@ class Camera:
             self._cap.release()
             time.sleep(backoff)
 
-            self._cap = cv2.VideoCapture(self._source)
+            self._cap = self._cv2.VideoCapture(self._source)
             if self._cap.isOpened():
-                self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self._width)
-                self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._height)
-                self._cap.set(cv2.CAP_PROP_FPS, self._fps)
+                self._cap.set(self._cv2.CAP_PROP_FRAME_WIDTH, self._width)
+                self._cap.set(self._cv2.CAP_PROP_FRAME_HEIGHT, self._height)
+                self._cap.set(self._cv2.CAP_PROP_FPS, self._fps)
                 logger.info(
                     "Reconnected to source %r on attempt %d.",
                     self._source, attempt,
@@ -159,17 +162,17 @@ class Camera:
     @property
     def actual_width(self) -> int:
         """Actual frame width reported by the capture device."""
-        return int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        return int(self._cap.get(self._cv2.CAP_PROP_FRAME_WIDTH))
 
     @property
     def actual_height(self) -> int:
         """Actual frame height reported by the capture device."""
-        return int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        return int(self._cap.get(self._cv2.CAP_PROP_FRAME_HEIGHT))
 
     @property
     def actual_fps(self) -> float:
         """Actual FPS reported by the capture device."""
-        return self._cap.get(cv2.CAP_PROP_FPS)
+        return self._cap.get(self._cv2.CAP_PROP_FPS)
 
     @property
     def backend_name(self) -> str:
@@ -198,18 +201,18 @@ class Camera:
 
         # Optional properties – only include when the driver reports them.
         _optional: list[tuple[str, int]] = [
-            ("brightness", cv2.CAP_PROP_BRIGHTNESS),
-            ("contrast", cv2.CAP_PROP_CONTRAST),
-            ("saturation", cv2.CAP_PROP_SATURATION),
-            ("exposure", cv2.CAP_PROP_EXPOSURE),
-            ("gain", cv2.CAP_PROP_GAIN),
+            ("brightness", self._cv2.CAP_PROP_BRIGHTNESS),
+            ("contrast", self._cv2.CAP_PROP_CONTRAST),
+            ("saturation", self._cv2.CAP_PROP_SATURATION),
+            ("exposure", self._cv2.CAP_PROP_EXPOSURE),
+            ("gain", self._cv2.CAP_PROP_GAIN),
         ]
         for name, prop_id in _optional:
             val = self._cap.get(prop_id)
             if val != 0.0:
                 info[name] = val
 
-        fourcc_code = int(self._cap.get(cv2.CAP_PROP_FOURCC))
+        fourcc_code = int(self._cap.get(self._cv2.CAP_PROP_FOURCC))
         if fourcc_code != 0:
             fourcc_str = "".join(
                 chr((fourcc_code >> (8 * i)) & 0xFF) for i in range(4)
@@ -235,13 +238,13 @@ class Camera:
         """
         if width is not None:
             self._width = width
-            self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+            self._cap.set(self._cv2.CAP_PROP_FRAME_WIDTH, width)
         if height is not None:
             self._height = height
-            self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+            self._cap.set(self._cv2.CAP_PROP_FRAME_HEIGHT, height)
         if fps is not None:
             self._fps = fps
-            self._cap.set(cv2.CAP_PROP_FPS, fps)
+            self._cap.set(self._cv2.CAP_PROP_FPS, fps)
 
     def release(self) -> None:
         """Release the underlying ``VideoCapture`` object."""

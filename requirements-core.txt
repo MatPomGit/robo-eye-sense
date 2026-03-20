@@ -2,7 +2,7 @@
 # These are required for headless operation and basic detection.
 
 numpy>=1.20.0
-opencv-python>=4.5.0
+opencv-python-headless>=4.5.0
 
 # AprilTag detection
 # Pre-compiled binaries available for x86_64 and ARM (Raspberry Pi).

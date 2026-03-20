@@ -18,13 +18,13 @@ import importlib.util
 import warnings
 from typing import List, Optional
 
-import cv2
 import numpy as np
 
 from .base_detector import BaseDetector
 from .results import Detection, DetectionType
 
 _PUPIL_APRILTAGS_AVAILABLE: Optional[bool] = None
+_DETECTOR_REFS: list[object] = []
 
 
 def _apriltags_available() -> bool:
@@ -37,6 +37,12 @@ def _apriltags_available() -> bool:
 
 
 _ALL_FAMILIES = "tag36h11 tag25h9 tag16h5 tag12h10"
+
+
+def retain_detector_reference(detector: object) -> object:
+    """Keep a native AprilTag detector alive for the process lifetime."""
+    _DETECTOR_REFS.append(detector)
+    return detector
 
 
 class AprilTagDetector(BaseDetector):

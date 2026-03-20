@@ -18,6 +18,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 import cv2
 import numpy as np
 
+from robo_vision import april_tag_detector as _april_runtime
+
 from .base import BaseMode
 
 logger = logging.getLogger(__name__)
@@ -214,10 +216,13 @@ class PoseMode(BaseMode):
         """Create the AprilTag detector on first use."""
         if self._detector is not None:
             return
+        if not _april_runtime._apriltags_available():
+            self._detector = None
+            return
         try:
             from pupil_apriltags import Detector  # type: ignore[import-untyped]
 
-            self._detector = Detector(
+            self._detector = _april_runtime.retain_detector_reference(Detector(
                 families=_ALL_FAMILIES,
                 nthreads=1,
                 quad_decimate=2.0,
@@ -225,7 +230,7 @@ class PoseMode(BaseMode):
                 refine_edges=1,
                 decode_sharpening=0.25,
                 debug=0,
-            )
+            ))
             logger.info("AprilTag detector initialised (%s)", _ALL_FAMILIES)
             return
         except Exception as exc:
