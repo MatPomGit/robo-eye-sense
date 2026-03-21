@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pathlib
 import re
 from unittest.mock import MagicMock, patch
 
@@ -32,6 +33,14 @@ class TestPackageVersion:
         assert re.match(pattern, robo_vision.__version__), (
             f"__version__ {robo_vision.__version__!r} does not match semver"
         )
+
+    def test_requires_python_matches_runtime_syntax_floor(self):
+        pyproject = pathlib.Path(__file__).resolve().parents[1] / "pyproject.toml"
+        text = pyproject.read_text(encoding="utf-8")
+        match = re.search(r'^requires-python = ">=([0-9]+)\.([0-9]+)"$', text, re.M)
+        assert match is not None, "requires-python must be declared in pyproject.toml"
+        major, minor = map(int, match.groups())
+        assert (major, minor) >= (3, 10)
 
 
 # ---------------------------------------------------------------------------
