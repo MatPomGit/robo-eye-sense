@@ -282,6 +282,53 @@ class TestAutoFollowScenario:
         assert result.target_marker_id == "3"
 
 
+
+
+    def test_temporal_smoothing_reduces_step_change(self):
+        cam = MagicMock()
+        det = MagicMock()
+        s = AutoFollowScenario(
+            camera=cam,
+            detector=det,
+            frame_width=640,
+            frame_height=480,
+            smoothing=0.5,
+        )
+        r1 = s.compute_from_detections([_april("1", (320, 240))], timestamp=1.0)
+        r2 = s.compute_from_detections([_april("1", (420, 240))], timestamp=2.0)
+        assert r1.position_vector == pytest.approx((0.0, 0.0))
+        assert r2.position_vector[0] == pytest.approx(-50.0)
+        assert r2.tracking_state == "detected"
+
+    def test_prediction_holds_target_across_short_dropout(self):
+        cam = MagicMock()
+        det = MagicMock()
+        s = AutoFollowScenario(
+            camera=cam,
+            detector=det,
+            frame_width=640,
+            frame_height=480,
+            prediction_horizon_frames=2,
+        )
+        s.compute_from_detections([_april("1", (300, 240))], timestamp=1.0)
+        s.compute_from_detections([_april("1", (320, 240))], timestamp=2.0)
+        predicted = s.compute_from_detections([], timestamp=3.0)
+        assert predicted.tracking_state == "predicted"
+        assert predicted.target_marker_id == "1"
+        assert predicted.predicted_position is not None
+        assert predicted.frames_since_seen == 1
+
+    def test_compensated_yaw_subtracts_camera_yaw(self):
+        cam = MagicMock()
+        det = MagicMock()
+        s = AutoFollowScenario(camera=cam, detector=det)
+        result = s.compute_from_detections(
+            [_april("1", (420, 240))],
+            timestamp=1.0,
+            camera_yaw_deg=5.0,
+        )
+        assert result.compensated_yaw == pytest.approx(result.yaw - 5.0)
+
 # ---------------------------------------------------------------------------
 # CLI --mode follow (replaces legacy --mode auto)
 # ---------------------------------------------------------------------------

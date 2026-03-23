@@ -596,6 +596,7 @@ pytest tests/ -v
 | [kalibracja_kamery.md](kalibracja_kamery.md) | Kompletna instrukcja kalibracji kamery (intrinsyki, dystorsja, szachownica) |
 | [markery_wizyjne_nawigacja.md](markery_wizyjne_nawigacja.md) | Przewodnik po markerach wizyjnych w nawigacji robotów |
 | [camera-spatial-orientation.md](camera-spatial-orientation.md) | Orientacja przestrzenna kamery |
+| [docs_apriltag_tracking_head_motion.md](docs_apriltag_tracking_head_motion.md) | Analiza utraty śledzenia AprilTagów przy ruchach głowy robota |
 | [github_releases_packages.md](github_releases_packages.md) | Przewodnik po GitHub Releases i Packages |
 | [CHANGELOG.md](CHANGELOG.md) | Historia zmian i wydań |
 
