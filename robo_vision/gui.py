@@ -116,6 +116,15 @@ _MODE_LINE_COLORS: dict[str, tuple[int, int, int]] = {
     "Pose":        (255,   0, 200),  # magenta
 }
 
+# UI palette/styling tuned for better readability on bright and dark camera feeds
+_PANEL_BG = "#f4f7fb"
+_SURFACE_BG = "#ffffff"
+_ACCENT = "#1f5fbf"
+_MUTED = "#5b6472"
+_BORDER = "#d7deea"
+_STATUS_BG = "#eaf1ff"
+_STATUS_FG = "#163a70"
+
 
 def render_3d_scene(
     width: int,
@@ -255,6 +264,8 @@ class RoboEyeSenseApp:
 
         self.root.title("robot-vision")
         self.root.resizable(True, True)
+        self.root.configure(bg=_PANEL_BG)
+
 
         # ── State variables ──────────────────────────────────────────────
         self._running = True
@@ -349,6 +360,7 @@ class RoboEyeSenseApp:
         )
 
         # Build the UI
+        self._configure_styles()
         self._build_ui()
 
         # Handle window close
@@ -385,6 +397,39 @@ class RoboEyeSenseApp:
             names.append("Laser spots")
         return names
 
+    def _configure_styles(self) -> None:
+        """Configure a calmer ttk theme with clearer section hierarchy."""
+        style = ttk.Style(self.root)
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+
+        self.root.option_add("*Font", "TkDefaultFont 10")
+        self.root.option_add("*TCombobox*Listbox.font", "TkDefaultFont 10")
+
+        style.configure("App.TFrame", background=_PANEL_BG)
+        style.configure("Panel.TFrame", background=_SURFACE_BG, relief="solid", borderwidth=1)
+        style.configure("Section.TLabelframe", background=_SURFACE_BG, relief="solid", borderwidth=1)
+        style.configure("Section.TLabelframe.Label", background=_SURFACE_BG, foreground=_ACCENT, font=("", 10, "bold"))
+        style.configure("Header.TLabel", background=_SURFACE_BG, foreground=_ACCENT, font=("", 11, "bold"))
+        style.configure("Body.TLabel", background=_SURFACE_BG, foreground="#1f2937")
+        style.configure("Hint.TLabel", background=_SURFACE_BG, foreground=_MUTED, font=("", 8, "italic"))
+        style.configure("Value.TLabel", background=_SURFACE_BG, foreground="#0f172a", font=("", 9, "bold"))
+        style.configure("Status.TLabel", background=_STATUS_BG, foreground=_STATUS_FG, font=("", 9, "bold"), padding=(10, 6))
+        style.configure("TCheckbutton", background=_SURFACE_BG)
+        style.configure("TRadiobutton", background=_SURFACE_BG)
+        style.configure("TNotebook", background=_SURFACE_BG, borderwidth=0)
+        style.configure("TNotebook.Tab", padding=(10, 5))
+        style.configure("TButton", padding=(8, 5))
+        style.map("Accent.TButton", background=[("active", "#2d74e0"), ("!disabled", _ACCENT)], foreground=[("!disabled", "white")])
+
+    def _make_section(self, parent: ttk.Frame, title: str) -> ttk.LabelFrame:
+        """Create a consistently styled section container."""
+        section = ttk.LabelFrame(parent, text=title, style="Section.TLabelframe", padding=(10, 8))
+        section.pack(fill="x", pady=(0, 8))
+        return section
+
     # ──────────────────────────────────────────────────────────────────────
     # UI construction
     # ──────────────────────────────────────────────────────────────────────
@@ -402,16 +447,16 @@ class RoboEyeSenseApp:
         self.root.minsize(780, 480)
 
         # Left control panel (spans both content rows)
-        self._ctrl_frame = ttk.Frame(self.root, padding=4, width=200)
+        self._ctrl_frame = ttk.Frame(self.root, padding=6, width=220, style="Panel.TFrame")
         self._ctrl_frame.grid(row=0, column=0, rowspan=2, sticky="nsew")
         self._ctrl_frame.pack_propagate(False)
 
         # Scrollable wrapper for control panel contents
-        ctrl_canvas = tk.Canvas(self._ctrl_frame, highlightthickness=0)
+        ctrl_canvas = tk.Canvas(self._ctrl_frame, highlightthickness=0, bg=_SURFACE_BG)
         ctrl_scrollbar = ttk.Scrollbar(
             self._ctrl_frame, orient="vertical", command=ctrl_canvas.yview,
         )
-        inner_frame = ttk.Frame(ctrl_canvas)
+        inner_frame = ttk.Frame(ctrl_canvas, style="Panel.TFrame")
 
         inner_frame.bind(
             "<Configure>",
@@ -434,15 +479,15 @@ class RoboEyeSenseApp:
         inner_frame.bind("<MouseWheel>", _on_ctrl_mousewheel)
 
         # Centre video canvas (row=0, col=1 in normal mode)
-        self._canvas = tk.Canvas(self.root, bg="black")
+        self._canvas = tk.Canvas(self.root, bg="#10131a", highlightthickness=0)
         self._canvas.grid(row=0, column=1, sticky="nsew")
 
         # Info panel — below the camera in col=1 (row=1)
-        self._info_frame = ttk.Frame(self.root, padding=8)
+        self._info_frame = ttk.Frame(self.root, padding=8, style="Panel.TFrame")
         self._info_frame.grid(row=1, column=1, sticky="nsew")
 
         # Right mode panel — full right column (col=2, rowspan=2)
-        self._mode_frame = ttk.Frame(self.root, padding=8, width=280)
+        self._mode_frame = ttk.Frame(self.root, padding=8, width=300, style="Panel.TFrame")
         self._mode_frame.grid(row=0, column=2, rowspan=2, sticky="nsew")
         self._mode_frame.pack_propagate(False)
 
@@ -455,57 +500,53 @@ class RoboEyeSenseApp:
         status_bar = ttk.Label(
             self.root,
             textvariable=self._status_var,
-            relief=tk.SUNKEN,
+            style="Status.TLabel",
             anchor="w",
-            padding=(4, 2),
         )
         status_bar.grid(row=2, column=0, columnspan=3, sticky="ew")
 
     def _build_controls(self, parent: ttk.Frame) -> None:
         """Build the left-side control panel."""
-        ttk.Label(parent, text="CONTROLS", font=("", 10, "bold")).pack(
-            anchor="w", pady=(0, 2)
+        ttk.Label(parent, text="Controls", style="Header.TLabel").pack(
+            anchor="w", pady=(0, 8)
         )
 
-        # ── Quality (detection mode) ──────────────────────────────────────
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=1)
-        ttk.Label(parent, text="Quality").pack(anchor="w")
+        quality_section = self._make_section(parent, "Detection quality")
+        ttk.Label(quality_section, text="Preset", style="Body.TLabel").pack(anchor="w")
 
         quality_combo = ttk.Combobox(
-            parent,
+            quality_section,
             textvariable=self._quality_var,
             values=list(_QUALITY_DISPLAY.keys()),
             state="readonly",
             width=28,
         )
-        quality_combo.pack(anchor="w", pady=(1, 0))
+        quality_combo.pack(fill="x", pady=(2, 0))
         quality_combo.bind("<<ComboboxSelected>>", self._on_quality_change)
 
         # Description of the currently selected quality level
         initial_desc = _QUALITY_DESCRIPTIONS.get(self.detector.mode, "")
         self._quality_desc_var = tk.StringVar(value=initial_desc)
         self._quality_desc_label = ttk.Label(
-            parent,
+            quality_section,
             textvariable=self._quality_desc_var,
             wraplength=180,
             font=("", 8, "italic"),
         )
-        self._quality_desc_label.pack(anchor="w", pady=(1, 0))
+        self._quality_desc_label.pack(anchor="w", pady=(4, 0))
 
         # Keyboard shortcut hint
         ttk.Label(
-            parent,
+            quality_section,
             text="Ctrl+1 / 2 / 3",
-            font=("", 7),
-            foreground="gray",
-        ).pack(anchor="w")
+            style="Hint.TLabel",
+        ).pack(anchor="w", pady=(2, 0))
 
-        # ── Detection modes ───────────────────────────────────────────────
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=1)
-        ttk.Label(parent, text="Detection modes").pack(anchor="w")
+        detector_section = self._make_section(parent, "Active detectors")
+        ttk.Label(detector_section, text="Choose which algorithms are running.", style="Hint.TLabel").pack(anchor="w", pady=(0, 4))
 
         self._april_cb = ttk.Checkbutton(
-            parent,
+            detector_section,
             text="AprilTag",
             variable=self._enable_april,
             command=self._on_toggle_april,
@@ -513,38 +554,37 @@ class RoboEyeSenseApp:
         self._april_cb.pack(anchor="w")
 
         ttk.Checkbutton(
-            parent,
+            detector_section,
             text="QR Code",
             variable=self._enable_qr,
             command=self._on_toggle_qr,
         ).pack(anchor="w")
 
         ttk.Checkbutton(
-            parent,
+            detector_section,
             text="Laser Spot",
             variable=self._enable_laser,
             command=self._on_toggle_laser,
         ).pack(anchor="w")
 
-        # ── Parameters ───────────────────────────────────────────────────
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=1)
-        ttk.Label(parent, text="Parameters").pack(anchor="w")
+        parameter_section = self._make_section(parent, "Laser parameters")
+        ttk.Label(parameter_section, text="Tune the spot detector and preview thresholding.", style="Hint.TLabel").pack(anchor="w", pady=(0, 4))
 
         # Laser threshold
-        ttk.Label(parent, text="Laser threshold min (0–255)", 
+        ttk.Label(parameter_section, text="Laser threshold min (0–255)", 
         font=("", 8, "italic")
         ).pack(
             anchor="w", pady=(1, 0)
         )
 
         self._threshold_label = ttk.Label(
-            parent, text=str(self._laser_threshold.get()), 
+            parameter_section, text=str(self._laser_threshold.get()), style="Value.TLabel",
         font=("", 8, "italic")
         
         )
         self._threshold_label.pack(anchor="e")
         ttk.Scale(
-            parent,
+            parameter_section,
             from_=0,
             to=255,
             orient="horizontal",
@@ -553,19 +593,19 @@ class RoboEyeSenseApp:
         ).pack(fill="x")
 
         # Laser threshold max
-        ttk.Label(parent, text="Laser threshold max (0–255)", 
+        ttk.Label(parameter_section, text="Laser threshold max (0–255)", 
         font=("", 8, "italic")
         ).pack(
             anchor="w", pady=(1, 0)
         )
         self._threshold_max_label = ttk.Label(
-            parent, text=str(self._laser_threshold_max.get()), 
+            parameter_section, text=str(self._laser_threshold_max.get()), style="Value.TLabel",
         font=("", 8, "italic")
         
         )
         self._threshold_max_label.pack(anchor="e")
         ttk.Scale(
-            parent,
+            parameter_section,
             from_=0,
             to=255,
             orient="horizontal",
@@ -574,19 +614,19 @@ class RoboEyeSenseApp:
         ).pack(fill="x")
 
         # Laser target area
-        ttk.Label(parent, text="Laser target area (px)", 
+        ttk.Label(parameter_section, text="Laser target area (px)", 
         font=("", 8, "italic")
         ).pack(
             anchor="w", pady=(2, 0)
         )
         self._target_area_label = ttk.Label(
-            parent, text=str(self._laser_target_area.get()), 
+            parameter_section, text=str(self._laser_target_area.get()), style="Value.TLabel",
         font=("", 8, "italic")
         
         )
         self._target_area_label.pack(anchor="e")
         ttk.Scale(
-            parent,
+            parameter_section,
             from_=4,
             to=2000,
             orient="horizontal",
@@ -595,19 +635,19 @@ class RoboEyeSenseApp:
         ).pack(fill="x")
 
         # Laser sensitivity
-        ttk.Label(parent, text="Laser sensitivity (0–100)", 
+        ttk.Label(parameter_section, text="Laser sensitivity (0–100)", 
         font=("", 8, "italic")
         ).pack(
             anchor="w", pady=(2, 0)
         )
         self._sensitivity_label = ttk.Label(
-            parent, text=str(self._laser_sensitivity.get()), 
+            parameter_section, text=str(self._laser_sensitivity.get()), style="Value.TLabel",
         font=("", 8, "italic")
         
         )
         self._sensitivity_label.pack(anchor="e")
         ttk.Scale(
-            parent,
+            parameter_section,
             from_=0,
             to=100,
             orient="horizontal",
@@ -616,10 +656,10 @@ class RoboEyeSenseApp:
         ).pack(fill="x")
 
         # Laser channel selection
-        ttk.Label(parent, text="Laser channels").pack(
+        ttk.Label(parameter_section, text="Laser channels", style="Body.TLabel").pack(
             anchor="w", pady=(1, 0)
         )
-        _ch_frame = ttk.Frame(parent)
+        _ch_frame = ttk.Frame(parameter_section, style="Panel.TFrame")
         _ch_frame.pack(anchor="w")
         ttk.Checkbutton(
             _ch_frame, text="R", variable=self._laser_ch_r,
@@ -636,17 +676,16 @@ class RoboEyeSenseApp:
 
         # Threshold overlay toggle
         ttk.Checkbutton(
-            parent,
+            parameter_section,
             text="Show threshold overlay",
             variable=self._show_threshold_overlay,
         ).pack(anchor="w", pady=(1, 0))
 
-        # ── Recording ─────────────────────────────────────────────────────
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=1)
-        ttk.Label(parent, text="Recording", font=("", 8, "bold")).pack(anchor="w")
+        recording_section = self._make_section(parent, "Recording")
 
         self._record_btn = ttk.Button(
-            parent,
+            recording_section,
+            style="Accent.TButton",
             text="Start recording",
             command=self._on_toggle_recording,
         )
@@ -654,19 +693,15 @@ class RoboEyeSenseApp:
 
         self._record_status_var = tk.StringVar(value="Not recording")
         ttk.Label(
-            parent,
+            recording_section,
             textvariable=self._record_status_var,
-            font=("", 8, "italic"),
+            style="Hint.TLabel",
             wraplength=180,
         ).pack(anchor="w")
 
-        # ── Camera settings ───────────────────────────────────────────────
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=1)
-        ttk.Label(parent, text="Camera settings", font=("", 10, "bold")).pack(
-            anchor="w"
-        )
+        camera_section = self._make_section(parent, "Camera")
 
-        res_frame = ttk.Frame(parent)
+        res_frame = ttk.Frame(camera_section, style="Panel.TFrame")
         res_frame.pack(fill="x", pady=(1, 0))
         ttk.Label(res_frame, text="Resolution:").pack(side="left")
         ttk.Combobox(
@@ -677,7 +712,7 @@ class RoboEyeSenseApp:
             width=11,
         ).pack(side="left", padx=(4, 0))
 
-        fps_frame = ttk.Frame(parent)
+        fps_frame = ttk.Frame(camera_section, style="Panel.TFrame")
         fps_frame.pack(fill="x", pady=(1, 0))
         ttk.Label(fps_frame, text="Target FPS:").pack(side="left")
         ttk.Combobox(
@@ -689,60 +724,56 @@ class RoboEyeSenseApp:
         ).pack(side="left", padx=(4, 0))
 
         ttk.Button(
-            parent,
+            camera_section,
             text="Apply camera settings",
             command=self._on_apply_camera_settings,
         ).pack(fill="x", pady=(2, 1))
 
-        # ── Layout toggle ─────────────────────────────────────────────────
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=1)
+        layout_section = self._make_section(parent, "Workspace")
+        ttk.Label(layout_section, text="Switch between focus-on-video and full control layouts.", style="Hint.TLabel").pack(anchor="w", pady=(0, 4))
         self._layout_btn_var = tk.StringVar(value="Compact view")
         self._layout_btn = ttk.Button(
-            parent,
+            layout_section,
             textvariable=self._layout_btn_var,
             command=self._toggle_layout,
         )
         self._layout_btn.pack(fill="x", pady=(0, 2))
 
-        # ── Quit button ───────────────────────────────────────────────────
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=1)
-        ttk.Button(parent, text="\u2715 Close", command=self._on_close).pack(fill="x")
+        action_section = self._make_section(parent, "Application")
+        ttk.Button(action_section, text="\u2715 Close", command=self._on_close).pack(fill="x")
 
     def _build_info_panel(self, parent: ttk.Frame) -> None:
         """Build the info / camera / quality panel (below the video in normal mode)."""
-        ttk.Label(parent, text="INFO / CAMERA / QUALITY", font=("", 10, "bold")).pack(
-            anchor="w", pady=(0, 4)
+        ttk.Label(parent, text="Session overview", style="Header.TLabel").pack(
+            anchor="w", pady=(0, 6)
         )
 
         # Software name, version, camera parameters and quality — merged section
         ttk.Label(
             parent,
             text=f"{APP_NAME} v{__version__}",
-            font=("", 9, "italic"),
+            style="Hint.TLabel",
         ).pack(anchor="w")
 
         self._cam_fps_var = tk.StringVar(value="FPS: –")
         self._cam_res_var = tk.StringVar(value="Resolution: –")
-        ttk.Label(parent, textvariable=self._cam_fps_var).pack(anchor="w")
-        ttk.Label(parent, textvariable=self._cam_res_var).pack(anchor="w")
+        summary_section = self._make_section(parent, "Camera summary")
+        ttk.Label(summary_section, textvariable=self._cam_fps_var, style="Body.TLabel").pack(anchor="w")
+        ttk.Label(summary_section, textvariable=self._cam_res_var, style="Body.TLabel").pack(anchor="w")
 
         initial_label = _QUALITY_DISPLAY_INV.get(self.detector.mode, "Normal")
         self._info_quality_var = tk.StringVar(value=initial_label)
         self._info_quality_label = ttk.Label(
-            parent,
+            summary_section,
             textvariable=self._info_quality_var,
-            font=("", 9, "bold"),
-            foreground="#336699",
+            style="Value.TLabel",
         )
-        self._info_quality_label.pack(anchor="w")
+        self._info_quality_label.pack(anchor="w", pady=(4, 0))
 
-        # Detected objects list
-        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
-        ttk.Label(parent, text="Detected objects", font=("", 9, "bold")).pack(
-            anchor="w"
-        )
+        list_section = self._make_section(parent, "Detected objects")
+        ttk.Label(list_section, text="Latest recognitions from the current frame.", style="Hint.TLabel").pack(anchor="w", pady=(0, 4))
 
-        list_frame = ttk.Frame(parent)
+        list_frame = ttk.Frame(list_section, style="Panel.TFrame")
         list_frame.pack(fill="x")
         scrollbar = ttk.Scrollbar(list_frame, orient="vertical")
         self._detections_list = tk.Listbox(
@@ -758,8 +789,8 @@ class RoboEyeSenseApp:
 
     def _build_mode_panel(self, parent: ttk.Frame) -> None:
         """Build the right-side mode panel (mode selector + tabbed notebook)."""
-        ttk.Label(parent, text="MODE", font=("", 9, "bold")).pack(
-            anchor="w", pady=(0, 4)
+        ttk.Label(parent, text="Operating modes", style="Header.TLabel").pack(
+            anchor="w", pady=(0, 6)
         )
 
         mode_combo = ttk.Combobox(
@@ -769,7 +800,7 @@ class RoboEyeSenseApp:
             state="readonly",
             width=28,
         )
-        mode_combo.pack(anchor="w", pady=(0, 4))
+        mode_combo.pack(fill="x", pady=(0, 6))
         mode_combo.bind("<<ComboboxSelected>>", self._on_mode_change)
 
         ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
@@ -1092,7 +1123,7 @@ class RoboEyeSenseApp:
         )
         self._pose_sensitivity_label.pack(side="right")
         ttk.Scale(
-            parent,
+            parameter_section,
             from_=0,
             to=100,
             orient="horizontal",
