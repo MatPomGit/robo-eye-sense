@@ -156,6 +156,28 @@ class TestCentroidTrackerUnlabeled:
         # IDs should be distinct
         assert detections[0].track_id != detections[1].track_id
 
+    def test_tracker_populates_quality_metrics(self):
+        tracker = CentroidTracker(max_distance=30)
+        detections = [_laser((50, 50))]
+        tracker.update(detections)
+
+        det = detections[0]
+        assert det.estimated_center is not None
+        assert 0.0 <= det.tracking_quality <= 1.0
+        assert 0.0 <= det.position_quality <= 1.0
+        assert det.track_age == 1
+        assert "match_distance_px" in det.quality_metrics
+
+    def test_smoothed_estimate_reduces_position_jump(self):
+        tracker = CentroidTracker(max_distance=50)
+        tracker.update([_laser((10, 10))])
+        d2 = [_laser((30, 10))]
+        tracker.update(d2)
+
+        assert d2[0].estimated_center is not None
+        assert d2[0].estimated_center[0] < d2[0].center[0]
+        assert d2[0].track_age == 2
+
 
 # ---------------------------------------------------------------------------
 # Kalman-filter tracking (use_kalman=True)

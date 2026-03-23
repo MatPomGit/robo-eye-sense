@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 
 class DetectionType(Enum):
@@ -65,6 +65,24 @@ class Detection:
         ``None`` until the detection has been through a tracker update.
     confidence:
         Detection confidence score in the range ``[0.0, 1.0]``.
+    estimated_center:
+        Smoothed tracker estimate of the object position.  When available,
+        it is less jittery than ``center`` and better suited for stable
+        visualisation or downstream control loops.
+    tracking_quality:
+        Composite quality score in the range ``[0.0, 1.0]`` that reflects
+        how confidently the current observation was associated with an
+        existing track.
+    position_quality:
+        Quality score in the range ``[0.0, 1.0]`` describing how reliable
+        the position estimate is after combining detector confidence,
+        geometric information, and temporal stability.
+    track_age:
+        Number of consecutive successful updates seen for the current track.
+    frames_since_seen:
+        Number of consecutive frames since the track was last matched.
+    quality_metrics:
+        Detailed diagnostic metrics exposed for evaluation, logging, or UI.
     """
 
     detection_type: DetectionType
@@ -73,6 +91,12 @@ class Detection:
     corners: List[Tuple[int, int]] = field(default_factory=list)
     track_id: Optional[int] = None
     confidence: float = 1.0
+    estimated_center: Optional[Tuple[int, int]] = None
+    tracking_quality: float = 0.0
+    position_quality: float = 0.0
+    track_age: int = 0
+    frames_since_seen: int = 0
+    quality_metrics: Dict[str, float] = field(default_factory=dict)
 
     def __repr__(self) -> str:  # pragma: no cover
         id_str = f"id={self.identifier!r} " if self.identifier is not None else ""

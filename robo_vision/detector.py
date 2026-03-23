@@ -549,6 +549,7 @@ class RoboEyeDetector:
         """
         for d in detections:
             colour = _COLOURS.get(d.detection_type, (255, 255, 255))
+            display_center = d.estimated_center or d.center
 
             # Bounding polygon
             if len(d.corners) >= 2:
@@ -556,26 +557,27 @@ class RoboEyeDetector:
                 cv2.polylines(frame, [pts], isClosed=True, color=colour, thickness=2)
 
             # Centre dot
-            cv2.circle(frame, d.center, 5, colour, -1)
+            cv2.circle(frame, display_center, 5, colour, -1)
 
             # Compute object orientation from its corners (0° when no corners)
             angle = _compute_orientation(d.corners)
 
             # Draw coordinate-axis glyph at the centroid
-            _draw_axes(frame, d.center, angle)
+            _draw_axes(frame, display_center, angle)
 
             # Build multi-line annotation that moves with the object
-            cx, cy = d.center
+            cx, cy = display_center
             lines: List[str] = [
                 f"X:{cx}  Y:{cy}",
                 f"ang:{angle:.1f}deg",
+                f"trackQ:{d.tracking_quality:.2f} posQ:{d.position_quality:.2f}",
             ]
             label = d.detection_type.value.replace("_", " ").title()
             if d.identifier:
                 payload = d.identifier[:20] + ("..." if len(d.identifier) > 20 else "")
                 label += f": {payload}"
             if d.track_id is not None:
-                label += f"  #{d.track_id}"
+                label += f"  #{d.track_id} age:{d.track_age}"
             lines.append(label)
 
             # Render lines below and to the right of the centroid

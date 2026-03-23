@@ -33,6 +33,12 @@ class TestDetection:
         d = self._make()
         assert d.track_id is None
         assert d.confidence == 1.0
+        assert d.estimated_center is None
+        assert d.tracking_quality == 0.0
+        assert d.position_quality == 0.0
+        assert d.track_age == 0
+        assert d.frames_since_seen == 0
+        assert d.quality_metrics == {}
 
     def test_explicit_fields(self):
         d = self._make(
@@ -41,12 +47,20 @@ class TestDetection:
             center=(100, 200),
             track_id=7,
             confidence=0.95,
+            estimated_center=(99, 199),
+            tracking_quality=0.8,
+            position_quality=0.7,
+            track_age=3,
         )
         assert d.detection_type == DetectionType.APRIL_TAG
         assert d.identifier == "42"
         assert d.center == (100, 200)
         assert d.track_id == 7
         assert d.confidence == pytest.approx(0.95)
+        assert d.estimated_center == (99, 199)
+        assert d.tracking_quality == pytest.approx(0.8)
+        assert d.position_quality == pytest.approx(0.7)
+        assert d.track_age == 3
 
     def test_empty_corners(self):
         d = Detection(
