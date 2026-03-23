@@ -78,7 +78,7 @@ _QUALITY_TO_DETECTION_MODE: dict[str, DetectionMode] = {
 logger = logging.getLogger("robo_vision")
 
 # Ordered list of operating mode names (index+1 maps to mode name).
-_MODES = ["basic", "offset", "slam", "calibration", "box", "pose", "follow"]
+_MODES = ["basic", "offset", "slam", "calibration", "box", "pose", "follow", "mediapipe"]
 
 # Default physical side length of AprilTags in metres.
 _DEFAULT_TAG_SIZE = 0.05
@@ -183,7 +183,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="basic",
         help=(
             "Operating mode – use the name or its 1-based index "
-            "(1=basic, 2=offset, 3=slam, 4=calibration, 5=box, 6=pose, 7=follow).  "
+            "(1=basic, 2=offset, 3=slam, 4=calibration, 5=box, 6=pose, 7=follow, 8=mediapipe).  "
             "'basic' – normal detection loop (default); "
             "'offset' – capture a reference frame, then compute the camera "
             "displacement vector after the camera has been moved. "
@@ -193,7 +193,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "'box' – detect box-like (cuboid) objects in real-time. "
             "'pose' – estimate 6-DoF pose of AprilTags using solvePnP. "
             "'follow' – actively track an AprilTag or box and generate "
-            "control signals (replaces the old 'auto' mode)."
+            "control signals (replaces the old 'auto' mode). "
+            "'mediapipe' – detect human body pose landmarks using MediaPipe "
+            "(requires the mediapipe package and a pose model bundle)."
         ),
     )
     parser.add_argument(
@@ -751,8 +753,8 @@ class RoboVisionController:
             return 1
 
         active_mode = None
-        if self._mode in ("calibration", "box", "pose", "follow"):
-            from modes import BoxMode, CalibrationMode, FollowMode, PoseMode
+        if self._mode in ("calibration", "box", "pose", "follow", "mediapipe"):
+            from modes import BoxMode, CalibrationMode, FollowMode, MediaPipeMode, PoseMode
 
             if self._mode == "calibration":
                 active_mode = CalibrationMode(
@@ -774,6 +776,8 @@ class RoboVisionController:
                     tag_size=self._tag_size,
                     calibration_path=self._calibration_path,
                 )
+            elif self._mode == "mediapipe":
+                active_mode = MediaPipeMode()
 
         recorder = None
         if self._record:

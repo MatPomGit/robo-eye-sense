@@ -100,7 +100,7 @@ _QUALITY_DESCRIPTIONS: dict[DetectionMode, str] = {
 }
 
 # Available mode choices for the mode combobox
-_MODE_CHOICES: list[str] = ["Basic", "Offset", "SLAM", "Follow", "Calibration", "Box", "Pose"]
+_MODE_CHOICES: list[str] = ["Basic", "Offset", "SLAM", "Follow", "Calibration", "Box", "Pose", "MediaPipe"]
 
 # Minimum number of chessboard captures before calibration can be run
 _CALIB_MIN_CAPTURES: int = 15
@@ -114,6 +114,7 @@ _MODE_LINE_COLORS: dict[str, tuple[int, int, int]] = {
     "Calibration": (  0, 200, 200),  # yellow
     "Box":         (  0, 140, 255),  # orange
     "Pose":        (255,   0, 200),  # magenta
+    "MediaPipe":   (  0, 255, 128),  # green
 }
 
 # UI palette/styling tuned for better readability on bright and dark camera feeds
@@ -332,6 +333,10 @@ class RoboEyeSenseApp:
         self._pose_mode_obj: Optional[Any] = None
         self._pose_active = False
         self._pose_sensitivity_var = tk.IntVar(value=50)
+
+        # MediaPipe pose mode state
+        self._mediapipe_mode_obj: Optional[Any] = None
+        self._mediapipe_active = False
 
         # Recording state
         self._recorder: Optional[VideoRecorder] = None
@@ -844,6 +849,12 @@ class RoboEyeSenseApp:
         self._build_pose_tab(pose_tab)
         self._pose_tab = pose_tab
 
+        # ── MediaPipe tab ─────────────────────────────────────────────────
+        mediapipe_tab = ttk.Frame(self._mode_notebook, padding=4)
+        self._mode_notebook.add(mediapipe_tab, text="MediaPipe")
+        self._build_mediapipe_tab(mediapipe_tab)
+        self._mediapipe_tab = mediapipe_tab
+
         # Bind AFTER all tabs are added so that initial tab selection
         # during construction does not trigger the handler.
         self._mode_notebook.bind(
@@ -1144,6 +1155,50 @@ class RoboEyeSenseApp:
             justify="left",
         ).pack(anchor="w")
 
+    def _build_mediapipe_tab(self, parent: ttk.Frame) -> None:
+        """Build the MediaPipe pose-detection mode tab contents."""
+        ttk.Label(
+            parent,
+            text="MediaPipe body pose detection",
+            font=("", 9, "bold"),
+        ).pack(anchor="w", pady=(0, 4))
+
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
+
+        # Max poses slider
+        poses_frame = ttk.Frame(parent)
+        poses_frame.pack(fill="x", pady=(0, 4))
+        ttk.Label(poses_frame, text="Max poses (1–5):").pack(side="left")
+        self._mediapipe_num_poses_var = tk.IntVar(value=3)
+        self._mediapipe_num_poses_label = ttk.Label(
+            poses_frame,
+            text=str(self._mediapipe_num_poses_var.get()),
+            width=3,
+            anchor="e",
+        )
+        self._mediapipe_num_poses_label.pack(side="right")
+        ttk.Scale(
+            parent,
+            from_=1,
+            to=5,
+            orient="horizontal",
+            variable=self._mediapipe_num_poses_var,
+            command=self._on_mediapipe_num_poses_change,
+        ).pack(fill="x", pady=(0, 4))
+
+        ttk.Separator(parent, orient="horizontal").pack(fill="x", pady=4)
+
+        self._mediapipe_status_var = tk.StringVar(
+            value="MediaPipe mode not started.\nSelect 'MediaPipe' mode to begin."
+        )
+        ttk.Label(
+            parent,
+            textvariable=self._mediapipe_status_var,
+            font=("Courier", 8),
+            wraplength=260,
+            justify="left",
+        ).pack(anchor="w")
+
 
     def _set_quality(self, mode: DetectionMode) -> None:
         """Programmatically switch to quality *mode* and update all UI elements."""
@@ -1184,12 +1239,14 @@ class RoboEyeSenseApp:
                 self._start_box_mode()
             elif new_mode == "Pose":
                 self._start_pose_mode()
+            elif new_mode == "MediaPipe":
+                self._start_mediapipe_mode()
         finally:
             self._mode_changing = False
 
-    # Ordered list of mode names corresponding to notebook tab indices 0..5
+    # Ordered list of mode names corresponding to notebook tab indices 0..6
     _NOTEBOOK_TAB_MODES: List[str] = [
-        "Offset", "SLAM", "Follow", "Calibration", "Box", "Pose"
+        "Offset", "SLAM", "Follow", "Calibration", "Box", "Pose", "MediaPipe"
     ]
 
     def _on_notebook_tab_changed(self, _event: Optional[object] = None) -> None:
@@ -1267,6 +1324,12 @@ class RoboEyeSenseApp:
             self._pose_mode_obj = None
             self._pose_status_var.set(
                 "Pose mode not started.\nSelect 'Pose' mode to begin."
+            )
+        if self._mediapipe_active:
+            self._mediapipe_active = False
+            self._mediapipe_mode_obj = None
+            self._mediapipe_status_var.set(
+                "MediaPipe mode not started.\nSelect 'MediaPipe' mode to begin."
             )
         self._set_mode_text("Basic mode.")
 
@@ -1420,6 +1483,33 @@ class RoboEyeSenseApp:
         self._pose_sensitivity_label.config(text=str(val))
         if self._pose_active:
             self._start_pose_mode()
+
+    def _start_mediapipe_mode(self) -> None:
+        """Activate the MediaPipe pose-detection mode."""
+        try:
+            from modes.mediapipe_mode import MediaPipeMode as _MediaPipeMode
+        except ImportError:
+            self._mediapipe_status_var.set(
+                "Error: MediaPipeMode not available.\n"
+                "Ensure 'modes' package is on the Python path."
+            )
+            return
+        num_poses = self._mediapipe_num_poses_var.get()
+        self._mediapipe_mode_obj = _MediaPipeMode(num_poses=num_poses)
+        self._mediapipe_active = True
+        self._mediapipe_status_var.set(
+            "MediaPipe mode active.\nDetected poses: 0"
+        )
+        self._mode_notebook.select(self._mediapipe_tab)
+
+    def _on_mediapipe_num_poses_change(
+        self, _value: Optional[str] = None
+    ) -> None:
+        """Update the max-poses label and restart MediaPipe mode if active."""
+        val = self._mediapipe_num_poses_var.get()
+        self._mediapipe_num_poses_label.config(text=str(val))
+        if self._mediapipe_active:
+            self._start_mediapipe_mode()
 
     def _on_calib_capture(self) -> None:
         """Request a chessboard-capture on the next frame."""
@@ -1767,6 +1857,21 @@ class RoboEyeSenseApp:
                     "headless": False,
                     "april_detections": april_tags,
                 },
+            )
+
+        # MediaPipe body-pose overlay
+        if self._mediapipe_active and self._mediapipe_mode_obj is not None:
+            vis = self._mediapipe_mode_obj.run(
+                vis, {"fps": self._fps_display, "headless": False}
+            )
+            pose_detections = getattr(
+                self._mediapipe_mode_obj, "detections", None
+            )
+            pose_count = (
+                len(pose_detections) if pose_detections is not None else 0
+            )
+            self._mediapipe_status_var.set(
+                f"MediaPipe mode active.\nDetected poses: {pose_count}"
             )
 
         # Mode-coloured crosshair lines drawn on top of all other annotations

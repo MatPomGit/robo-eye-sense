@@ -12,6 +12,7 @@ from .box_mode import BoxMode
 from .calibration_mode import CalibrationMode
 from .follow_mode import FollowMode
 from .live_mode import LiveMapMode, LiveMode
+from .mediapipe_mode import MediaPipeMode
 from .pose_mode import PoseMode
 
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     "FollowMode",
     "LiveMapMode",
     "LiveMode",
+    "MediaPipeMode",
     "PoseMode",
 ]
