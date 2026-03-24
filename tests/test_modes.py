@@ -593,11 +593,17 @@ class TestCLINewModes:
         args = _parse_args(["--mode", "8"])
         assert args.mode == "mediapipe"
 
+    def test_parse_mode_by_number_yolo(self):
+        from main import _parse_args
+
+        args = _parse_args(["--mode", "9"])
+        assert args.mode == "yolo"
+
     def test_parse_mode_invalid_number(self):
         from main import _parse_args
 
         with pytest.raises(SystemExit):
-            _parse_args(["--mode", "9"])
+            _parse_args(["--mode", "10"])
 
     def test_sensitivity_default(self):
         from main import _parse_args
@@ -628,6 +634,39 @@ class TestCLINewModes:
 
         args = _parse_args(["--mode", "mediapipe"])
         assert args.mode == "mediapipe"
+
+    def test_parse_mode_yolo(self):
+        from main import _parse_args
+
+        args = _parse_args(["--mode", "yolo"])
+        assert args.mode == "yolo"
+
+    def test_parse_yolo_args_defaults(self):
+        from main import _parse_args
+
+        args = _parse_args(["--mode", "yolo"])
+        assert args.yolo_model is None
+        assert args.yolo_conf == pytest.approx(0.25)
+        assert args.yolo_iou == pytest.approx(0.45)
+        assert args.yolo_classes is None
+        assert args.no_yolo_track is False
+
+    def test_parse_yolo_args_custom(self):
+        from main import _parse_args
+
+        args = _parse_args([
+            "--mode", "yolo",
+            "--yolo-model", "path/to/best.pt",
+            "--yolo-conf", "0.5",
+            "--yolo-iou", "0.6",
+            "--yolo-classes", "0", "1",
+            "--no-yolo-track",
+        ])
+        assert args.yolo_model == "path/to/best.pt"
+        assert args.yolo_conf == pytest.approx(0.5)
+        assert args.yolo_iou == pytest.approx(0.6)
+        assert args.yolo_classes == [0, 1]
+        assert args.no_yolo_track is True
 
 
 # ===========================================================================
@@ -952,4 +991,236 @@ class TestNewModeIntegration:
                     "--source", str(video),
                 ])
         # Mode must exit cleanly (rc=0) even when mediapipe is unavailable
+        assert rc == 0
+
+
+# ===========================================================================
+# YoloMode
+# ===========================================================================
+
+
+class TestYoloMode:
+    """Tests for the YOLO detection and tracking mode."""
+
+    def test_instantiation(self):
+        from modes.yolo_mode import YoloMode
+
+        mode = YoloMode()
+        assert isinstance(mode, YoloMode)
+
+    def test_default_detections_empty(self):
+        from modes.yolo_mode import YoloMode
+
+        mode = YoloMode()
+        assert mode.detections == []
+
+    def test_is_ready_before_init(self):
+        from modes.yolo_mode import YoloMode
+
+        mode = YoloMode()
+        assert not mode.is_ready
+
+    def test_run_returns_frame_shaped_output_no_ultralytics(self):
+        """When ultralytics is unavailable the mode returns an error frame."""
+        from modes.yolo_mode import YoloMode
+
+        mode = YoloMode()
+        mode._init_error = "ultralytics not installed"
+
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        ctx = {"headless": False, "key": -1, "frame_idx": 1, "fps": 30.0}
+        result = mode.run(frame, ctx)
+        assert result.shape == frame.shape
+        # Error overlay modifies the frame (red text drawn)
+        assert not np.array_equal(result, frame), (
+            "Error overlay should modify the frame"
+        )
+
+    def test_run_with_mock_model_no_detections(self):
+        """run() handles an empty result from the YOLO model."""
+        from modes.yolo_mode import YoloMode
+
+        mode = YoloMode()
+        mock_model = MagicMock()
+        mock_result = MagicMock()
+        mock_result.boxes = None
+        mock_model.track.return_value = [mock_result]
+        mode._model = mock_model
+
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        ctx = {"headless": False, "key": -1, "frame_idx": 1, "fps": 0.0}
+        result = mode.run(frame, ctx)
+        assert result.shape == frame.shape
+        assert mode.detections == []
+
+    def test_run_with_mock_model_with_detections(self):
+        """run() parses bounding boxes and populates detections."""
+        from modes.yolo_mode import YoloMode
+
+        mode = YoloMode(track=True)
+        mock_model = MagicMock()
+
+        # Build a fake boxes object using plain mocks (no torch needed)
+        fake_box = MagicMock()
+        fake_box.xyxy = [MagicMock(tolist=lambda: [10.0, 20.0, 50.0, 60.0])]
+        fake_box.conf = [MagicMock(__float__=lambda self: 0.9)]
+        fake_box.cls = [MagicMock(__int__=lambda self: 0)]
+        fake_box.id = [MagicMock(__int__=lambda self: 1)]
+
+        # Use a MagicMock that supports len() and indexing
+        boxes_mock = MagicMock()
+        boxes_mock.__len__ = MagicMock(return_value=1)
+        boxes_mock.__getitem__ = MagicMock(return_value=fake_box)
+
+        mock_result = MagicMock()
+        mock_result.boxes = boxes_mock
+        mock_result.names = {0: "person"}
+        mock_model.track.return_value = [mock_result]
+        mode._model = mock_model
+
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        ctx = {"headless": False, "key": -1, "frame_idx": 1, "fps": 30.0}
+        result = mode.run(frame, ctx)
+        assert result.shape == frame.shape
+
+    def test_run_detection_only_mode(self):
+        """With track=False the mode calls predict instead of track."""
+        from modes.yolo_mode import YoloMode
+
+        mode = YoloMode(track=False)
+        mock_model = MagicMock()
+        mock_result = MagicMock()
+        mock_result.boxes = None
+        mock_model.predict.return_value = [mock_result]
+        mode._model = mock_model
+
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        ctx = {"headless": False, "key": -1, "frame_idx": 1, "fps": 0.0}
+        mode.run(frame, ctx)
+        mock_model.predict.assert_called_once()
+        mock_model.track.assert_not_called()
+
+    def test_headless_output_error_path(self, capsys):
+        """In headless mode the error message is printed and frame preserved."""
+        from modes.yolo_mode import YoloMode
+
+        mode = YoloMode()
+        mode._init_error = "ultralytics not installed"
+
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        ctx = {"headless": True, "key": -1, "frame_idx": 3, "fps": 0.0}
+        result = mode.run(frame, ctx)
+        assert result.shape == frame.shape
+
+    def test_headless_output_detection_info(self, capsys):
+        """Headless mode prints detection count to stdout."""
+        from modes.yolo_mode import YoloMode
+
+        mode = YoloMode()
+        mock_model = MagicMock()
+        mock_result = MagicMock()
+        mock_result.boxes = None
+        mock_model.track.return_value = [mock_result]
+        mode._model = mock_model
+
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        ctx = {"headless": True, "key": -1, "frame_idx": 5, "fps": 0.0}
+        mode.run(frame, ctx)
+        out = capsys.readouterr().out
+        assert "frame 5" in out
+        assert "yolo_detected" in out
+
+    def test_yolo_detection_dataclass(self):
+        from modes.yolo_mode import YoloDetection
+
+        det = YoloDetection(
+            track_id=3,
+            class_id=0,
+            class_name="person",
+            confidence=0.88,
+            bbox=(10, 20, 50, 60),
+        )
+        assert det.track_id == 3
+        assert det.class_name == "person"
+        assert det.confidence == pytest.approx(0.88)
+        cx, cy = det.center
+        assert cx == 30
+        assert cy == 40
+
+    def test_yolo_detection_center_no_track_id(self):
+        from modes.yolo_mode import YoloDetection
+
+        det = YoloDetection(
+            track_id=None,
+            class_id=1,
+            class_name="car",
+            confidence=0.5,
+            bbox=(0, 0, 100, 100),
+        )
+        assert det.track_id is None
+        assert det.center == (50, 50)
+
+    def test_color_for_id_consistency(self):
+        """Same ID always returns the same color; None returns green."""
+        from modes.yolo_mode import YoloMode
+
+        mode = YoloMode()
+        c1 = mode._color_for_id(0)
+        c2 = mode._color_for_id(0)
+        assert c1 == c2
+        assert mode._color_for_id(None) == (0, 255, 0)
+
+    def test_init_error_on_import_failure(self):
+        """_ensure_initialized returns False when ultralytics is absent."""
+        from modes.yolo_mode import YoloMode
+
+        mode = YoloMode()
+        with patch.dict("sys.modules", {"ultralytics": None}):
+            result = mode._ensure_initialized()
+        assert result is False
+        assert mode._init_error is not None
+
+    def test_run_inference_exception_handled(self):
+        """Exceptions during inference return an unmodified frame copy."""
+        from modes.yolo_mode import YoloMode
+
+        mode = YoloMode()
+        mock_model = MagicMock()
+        mock_model.track.side_effect = RuntimeError("inference failed")
+        mode._model = mock_model
+
+        frame = np.zeros((80, 80, 3), dtype=np.uint8)
+        ctx = {"headless": False, "key": -1, "frame_idx": 1, "fps": 0.0}
+        result = mode.run(frame, ctx)
+        assert result.shape == frame.shape
+        assert mode.detections == []
+
+
+class TestYoloModeIntegration:
+    """Headless CLI integration test for YOLO mode."""
+
+    def test_yolo_headless(self, capsys, tmp_path):
+        """YOLO mode runs headless; gracefully handles missing ultralytics."""
+        video = tmp_path / "yolo.mp4"
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        writer = cv2.VideoWriter(str(video), fourcc, 1, (64, 64))
+        for _ in range(3):
+            writer.write(np.zeros((64, 64, 3), dtype=np.uint8))
+        writer.release()
+
+        with patch(
+            "robo_vision.april_tag_detector._apriltags_available",
+            return_value=False,
+        ):
+            with patch(
+                "modes.yolo_mode.YoloMode._ensure_initialized",
+                return_value=False,
+            ):
+                from main import main
+
+                rc = main([
+                    "--mode", "yolo",
+                    "--headless",
+                    "--source", str(video),
+                ])
         assert rc == 0

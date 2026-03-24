@@ -78,7 +78,7 @@ _QUALITY_TO_DETECTION_MODE: dict[str, DetectionMode] = {
 logger = logging.getLogger("robo_vision")
 
 # Ordered list of operating mode names (index+1 maps to mode name).
-_MODES = ["basic", "offset", "slam", "calibration", "box", "pose", "follow", "mediapipe"]
+_MODES = ["basic", "offset", "slam", "calibration", "box", "pose", "follow", "mediapipe", "yolo"]
 
 # Default physical side length of AprilTags in metres.
 _DEFAULT_TAG_SIZE = 0.05
@@ -183,7 +183,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="basic",
         help=(
             "Operating mode – use the name or its 1-based index "
-            "(1=basic, 2=offset, 3=slam, 4=calibration, 5=box, 6=pose, 7=follow, 8=mediapipe).  "
+            "(1=basic, 2=offset, 3=slam, 4=calibration, 5=box, 6=pose, 7=follow, 8=mediapipe, 9=yolo).  "
             "'basic' – normal detection loop (default); "
             "'offset' – capture a reference frame, then compute the camera "
             "displacement vector after the camera has been moved. "
@@ -195,7 +195,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "'follow' – actively track an AprilTag or box and generate "
             "control signals (replaces the old 'auto' mode). "
             "'mediapipe' – detect human body pose landmarks using MediaPipe "
-            "(requires the mediapipe package and a pose model bundle)."
+            "(requires the mediapipe package and a pose model bundle). "
+            "'yolo' – detect and track objects using YOLO via Ultralytics "
+            "(requires the ultralytics package; model downloaded on first use)."
         ),
     )
     parser.add_argument(
@@ -270,6 +272,50 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=(
             "Print camera information (resolution, FPS, backend, and all "
             "available parameters) and exit."
+        ),
+    )
+    parser.add_argument(
+        "--yolo-model",
+        default=None,
+        metavar="FILE",
+        help=(
+            "Path to YOLO weights file (*.pt) for 'yolo' mode. "
+            "When omitted, yolo11n.pt is used and downloaded automatically "
+            "on first run (requires the ultralytics package)."
+        ),
+    )
+    parser.add_argument(
+        "--yolo-conf",
+        type=float,
+        default=0.25,
+        metavar="THRESH",
+        help="Confidence threshold for YOLO detections (0–1, default: 0.25).",
+    )
+    parser.add_argument(
+        "--yolo-iou",
+        type=float,
+        default=0.45,
+        metavar="THRESH",
+        help="IoU threshold for YOLO NMS (0–1, default: 0.45).",
+    )
+    parser.add_argument(
+        "--yolo-classes",
+        nargs="*",
+        type=int,
+        default=None,
+        metavar="ID",
+        help=(
+            "COCO class IDs to detect in 'yolo' mode (space-separated). "
+            "E.g. --yolo-classes 0 1 2 to detect only persons, bicycles, "
+            "and cars. When omitted all classes are detected."
+        ),
+    )
+    parser.add_argument(
+        "--no-yolo-track",
+        action="store_true",
+        help=(
+            "Disable persistent tracking in 'yolo' mode. "
+            "By default ByteTrack assigns stable IDs across frames."
         ),
     )
     parser.add_argument(
@@ -583,6 +629,16 @@ class RoboVisionController:
         Path for recording the processed video to a file.
     sensitivity : int
         AprilTag detection sensitivity for pose mode (0–100, default: 50).
+    yolo_model : str, optional
+        Path to YOLO weights for ``'yolo'`` mode.
+    yolo_conf : float
+        YOLO confidence threshold (default: 0.25).
+    yolo_iou : float
+        YOLO IoU threshold for NMS (default: 0.45).
+    yolo_classes : list of int, optional
+        COCO class IDs to detect in ``'yolo'`` mode.
+    yolo_track : bool
+        Enable persistent tracking in ``'yolo'`` mode (default: ``True``).
 
     Examples
     --------
@@ -633,6 +689,11 @@ class RoboVisionController:
         map_file: str | None = None,
         record: str | None = None,
         sensitivity: int = 50,
+        yolo_model: str | None = None,
+        yolo_conf: float = 0.25,
+        yolo_iou: float = 0.45,
+        yolo_classes: list | None = None,
+        yolo_track: bool = True,
     ) -> None:
         if mode not in _MODES:
             raise ValueError(
@@ -665,6 +726,11 @@ class RoboVisionController:
         self._map_file = map_file
         self._record = record
         self._sensitivity = sensitivity
+        self._yolo_model = yolo_model
+        self._yolo_conf = yolo_conf
+        self._yolo_iou = yolo_iou
+        self._yolo_classes = yolo_classes
+        self._yolo_track = yolo_track
 
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
@@ -728,7 +794,6 @@ class RoboVisionController:
             from robo_vision._cv2_compat import get_cv2
 
             cv2 = get_cv2()
-
         detection_mode = _QUALITY_TO_DETECTION_MODE[self._quality]
 
         detector = RoboEyeDetector(
@@ -753,8 +818,8 @@ class RoboVisionController:
             return 1
 
         active_mode = None
-        if self._mode in ("calibration", "box", "pose", "follow", "mediapipe"):
-            from modes import BoxMode, CalibrationMode, FollowMode, MediaPipeMode, PoseMode
+        if self._mode in ("calibration", "box", "pose", "follow", "mediapipe", "yolo"):
+            from modes import BoxMode, CalibrationMode, FollowMode, MediaPipeMode, PoseMode, YoloMode
 
             if self._mode == "calibration":
                 active_mode = CalibrationMode(
@@ -778,6 +843,14 @@ class RoboVisionController:
                 )
             elif self._mode == "mediapipe":
                 active_mode = MediaPipeMode()
+            elif self._mode == "yolo":
+                active_mode = YoloMode(
+                    model_path=self._yolo_model,
+                    confidence=self._yolo_conf,
+                    iou=self._yolo_iou,
+                    classes=self._yolo_classes,
+                    track=self._yolo_track,
+                )
 
         recorder = None
         if self._record:
@@ -903,7 +976,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
     logger.info("%s %s", APP_NAME, __version__)
 
     cv2 = None
-    if not args.headless or args.mode in ("slam", "calibration", "box", "pose", "follow"):
+    if not args.headless or args.mode in ("slam", "calibration", "box", "pose", "follow", "yolo"):
         from robo_vision._cv2_compat import get_cv2
 
         cv2 = get_cv2()
@@ -1402,9 +1475,9 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
             print(f"{'='*50}")
         return 0
 
-    # ── New operational modes (calibration / box / pose / follow) ────────
-    if args.mode in ("calibration", "box", "pose", "follow"):
-        from modes import BoxMode, CalibrationMode, FollowMode, PoseMode
+    # ── New operational modes (calibration / box / pose / follow / yolo) ──
+    if args.mode in ("calibration", "box", "pose", "follow", "yolo"):
+        from modes import BoxMode, CalibrationMode, FollowMode, PoseMode, YoloMode
 
         if args.mode == "calibration":
             try:
@@ -1435,6 +1508,14 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                 target_distance=args.target_distance,
                 tag_size=args.tag_size,
                 calibration_path=args.cal,
+            )
+        elif args.mode == "yolo":
+            active_mode = YoloMode(
+                model_path=args.yolo_model,
+                confidence=args.yolo_conf,
+                iou=args.yolo_iou,
+                classes=args.yolo_classes,
+                track=not args.no_yolo_track,
             )
 
         recorder = None

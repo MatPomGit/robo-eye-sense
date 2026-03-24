@@ -14,6 +14,7 @@ from .follow_mode import FollowMode
 from .live_mode import LiveMapMode, LiveMode
 from .mediapipe_mode import MediaPipeMode
 from .pose_mode import PoseMode
+from .yolo_mode import YoloDetection, YoloMode
 
 __all__ = [
     "BaseMode",
@@ -24,4 +25,6 @@ __all__ = [
     "LiveMode",
     "MediaPipeMode",
     "PoseMode",
+    "YoloDetection",
+    "YoloMode",
 ]
